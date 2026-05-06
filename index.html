@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Heebee Asset OS</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@200;300;400;600&family=Space+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   HEEBEE LUXURY UI — TOKENS
+   ===================================================================== */
+*,*::before,*::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { font-size: 115%; }
+body {
+  margin: 0;
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background 0.55s cubic-bezier(0.4,0,0.2,1), color 0.55s cubic-bezier(0.4,0,0.2,1);
+  overflow-x: hidden;
+}
+
+body.light {
+  --bg:        #f5f5f7;
+  --bg2:       #ffffff;
+  --surface:   rgba(255,255,255,0.75);
+  --surface2:  rgba(255,255,255,0.55);
+  --border:    rgba(255,255,255,0.9);
+  --border2:   rgba(0,0,0,0.06);
+  --text:      #1d1d1f;
+  --text2:     #424245;
+  --text3:     #86868b;
+  --shadow:    0 4px 24px rgba(0,0,0,0.06);
+  --shadow2:   0 8px 40px rgba(0,0,0,0.10);
+  --btn-bg:    #1d1d1f;
+  --btn-fg:    #ffffff;
+  --gold:      #b8860b;
+  --gold2:     #d4a017;
+  --input-bg:  rgba(255,255,255,0.8);
+  --input-bdr: rgba(0,0,0,0.1);
+  --rule:      linear-gradient(to right,transparent,#b8860b,transparent);
+  --noise-op:  0.035;
+  --danger:    #c62828;
+  --success:   #2e7d32;
+}
+body.dark {
+  --bg:        #0a0a0f;
+  --bg2:       #111118;
+  --surface:   rgba(255,255,255,0.06);
+  --surface2:  rgba(255,255,255,0.04);
+  --border:    rgba(255,255,255,0.10);
+  --border2:   rgba(255,255,255,0.06);
+  --text:      #f5f5f7;
+  --text2:     #d2d2d7;
+  --text3:     #86868b;
+  --shadow:    0 4px 24px rgba(0,0,0,0.3);
+  --shadow2:   0 8px 40px rgba(0,0,0,0.5);
+  --btn-bg:    #f5f5f7;
+  --btn-fg:    #0a0a0f;
+  --gold:      #f0c040;
+  --gold2:     #d4a017;
+  --input-bg:  rgba(255,255,255,0.07);
+  --input-bdr: rgba(255,255,255,0.12);
+  --rule:      linear-gradient(to right,transparent,rgba(240,192,64,0.5),transparent);
+  --noise-op:  0.04;
+  --danger:    #ff6b6b;
+  --success:   #51cf66;
+}
+
+/* =====================================================================
+   AMBIENT BACKGROUND
+   ===================================================================== */
+.bg-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  animation: orbDrift ease-in-out infinite alternate;
+  transition: opacity 0.6s ease, background 0.6s ease;
+}
+body.light .orb1 { width:500px;height:500px;top:-80px;right:-80px;background:radial-gradient(circle,#e8d5b0,transparent 70%);opacity:.5;animation-duration:14s; }
+body.light .orb2 { width:400px;height:400px;bottom:-60px;left:-60px;background:radial-gradient(circle,#d4c4a0,transparent 70%);opacity:.4;animation-duration:18s;animation-delay:5s; }
+body.light .orb3 { width:280px;height:280px;top:45%;left:50%;background:radial-gradient(circle,#ede8df,transparent 70%);opacity:.35;animation-duration:22s;animation-delay:10s; }
+body.dark .orb1  { width:500px;height:500px;top:-80px;right:-80px;background:radial-gradient(circle,#1a2a4a,transparent 70%);opacity:.7;animation-duration:14s; }
+body.dark .orb2  { width:400px;height:400px;bottom:-60px;left:-60px;background:radial-gradient(circle,#0d1a30,transparent 70%);opacity:.6;animation-duration:18s;animation-delay:5s; }
+body.dark .orb3  { width:280px;height:280px;top:45%;left:50%;background:radial-gradient(circle,#1c1c30,transparent 70%);opacity:.5;animation-duration:22s;animation-delay:10s; }
+@keyframes orbDrift { 0%{transform:translate(0,0);} 100%{transform:translate(28px,18px);} }
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: var(--noise-op);
+  transition: opacity 0.55s ease;
+}
+
+/* =====================================================================
+   APP CONTAINER
+   ===================================================================== */
+.app {
+  position: relative;
+  z-index: 10;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: 0 20px 80px;
+}
+
+/* =====================================================================
+   HEADER
+   ===================================================================== */
+.hdr {
+  padding: 40px 0 24px;
+  text-align: center;
+  position: relative;
+}
+.eyebrow {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+}
+.brand {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 200;
+  font-size: clamp(2.2rem, 7vw, 3rem);
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 0;
+}
+.subbrand {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-top: 6px;
+}
+.gold-rule {
+  height: 1px;
+  background: var(--rule);
+  margin: 20px auto 0;
+  max-width: 200px;
+}
+.theme-toggle {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--surface);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text2);
+  transition: background 0.5s ease, border-color 0.5s ease;
+}
+
+/* =====================================================================
+   GLASS CARD
+   ===================================================================== */
+.glass {
+  background: var(--surface);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.3s ease;
+}
+
+/* =====================================================================
+   LOGIN
+   ===================================================================== */
+.login-panel { padding: 32px 24px; margin-top: 24px; }
+.login-title {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 200;
+  font-size: clamp(1.5rem, 4vw, 1.9rem);
+  letter-spacing: 2px;
+  margin: 0 0 6px;
+  text-align: center;
+}
+.login-sub {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+  text-align: center;
+  margin-bottom: 28px;
+}
+.field { margin-bottom: 18px; }
+.label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+  display: block;
+  margin-bottom: 8px;
+}
+.input {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 400;
+  font-size: 0.95rem;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--input-bdr);
+  background: var(--input-bg);
+  color: var(--text);
+  outline: none;
+  -webkit-appearance: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(184,134,11,0.12);
+}
+
+.pin-row {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+.pin-box {
+  font-family: 'Space Mono', monospace;
+  font-size: 1.4rem;
+  width: 56px;
+  height: 64px;
+  text-align: center;
+  border-radius: 14px;
+  border: 1px solid var(--input-bdr);
+  background: var(--input-bg);
+  color: var(--text);
+  outline: none;
+  -webkit-appearance: none;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+.pin-box:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(184,134,11,0.12);
+  transform: translateY(-1px);
+}
+
+.btn {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  width: 100%;
+  padding: 16px;
+  border-radius: 16px;
+  border: none;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.3s, opacity 0.2s;
+  margin-top: 8px;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow2); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--input-bdr);
+  color: var(--text2);
+}
+
+.feedback {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-align: center;
+  margin-top: 16px;
+  min-height: 16px;
+  transition: color 0.3s;
+}
+.feedback.ok    { color: var(--success); }
+.feedback.err   { color: var(--danger); }
+.feedback.muted { color: var(--text3); }
+
+/* =====================================================================
+   DASHBOARD
+   ===================================================================== */
+.user-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  margin-top: 16px;
+  margin-bottom: 18px;
+}
+.user-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--btn-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+body.dark .user-avatar { color: #0a0a0f; }
+.user-meta { display: flex; flex-direction: column; line-height: 1.2; }
+.user-name { font-weight: 400; font-size: 0.9rem; }
+.user-role {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.logout-btn {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--input-bdr);
+  color: var(--text2);
+  padding: 8px 14px;
+  border-radius: 60px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.logout-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+.welcome {
+  padding: 32px 24px;
+  margin-bottom: 14px;
+}
+.welcome-title {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 200;
+  font-size: clamp(1.6rem, 5vw, 2rem);
+  letter-spacing: 1.5px;
+  margin: 0 0 8px;
+}
+.welcome-sub {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 300;
+  font-size: 0.85rem;
+  color: var(--text2);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.section-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin: 24px 4px 10px;
+}
+
+.nav-list { display: grid; gap: 8px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.nav-item:hover { background: var(--surface2); transform: translateX(2px); }
+.nav-item.locked { cursor: not-allowed; opacity: 0.55; }
+.nav-item.locked:hover { transform: none; background: var(--surface); }
+.nav-left { display: flex; align-items: center; gap: 12px; }
+.nav-icon {
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface2);
+  font-size: 14px;
+  color: var(--gold);
+}
+.nav-text { display: flex; flex-direction: column; line-height: 1.2; }
+.nav-title { font-weight: 400; font-size: 0.9rem; }
+.nav-sub {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-top: 3px;
+}
+.phase-tag {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 60px;
+  background: var(--surface2);
+  color: var(--text3);
+}
+.phase-tag.live { background: rgba(46,125,50,0.12); color: var(--success); }
+body.dark .phase-tag.live { background: rgba(81,207,102,0.12); }
+
+.status-card {
+  padding: 22px 22px;
+  margin-top: 14px;
+}
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border2);
+}
+.status-row:last-child { border-bottom: none; }
+.status-key {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.status-val {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+/* =====================================================================
+   PANELS — ENTER / EXIT
+   ===================================================================== */
+.panel { display: none; }
+.panel.active {
+  display: block;
+  animation: panelReveal 0.5s cubic-bezier(0.4,0,0.2,1) forwards;
+}
+@keyframes panelReveal {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--input-bdr);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* =====================================================================
+   FOOTER
+   ===================================================================== */
+.foot {
+  text-align: center;
+  margin-top: 32px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+</style>
+</head>
+<body class="light">
+
+<!-- ambient -->
+<div class="bg-layer">
+  <div class="bg-orb orb1"></div>
+  <div class="bg-orb orb2"></div>
+  <div class="bg-orb orb3"></div>
+</div>
+
+<div class="app">
+
+  <!-- ============== HEADER ============== -->
+  <header class="hdr">
+    <div class="eyebrow">Heebee Coffee Pvt Ltd</div>
+    <h1 class="brand">Heebee</h1>
+    <div class="subbrand">Asset OS · v1</div>
+    <div class="gold-rule"></div>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">◐</button>
+  </header>
+
+  <!-- ============== LOGIN PANEL ============== -->
+  <section class="panel active" id="panel-login">
+    <div class="glass login-panel">
+      <h2 class="login-title">Sign in</h2>
+      <div class="login-sub">Authorised users only</div>
+
+      <div class="field" id="field-email">
+        <label class="label">Email</label>
+        <input type="email" class="input" id="email" autocomplete="username" placeholder="you@heebee.com">
+      </div>
+
+      <div class="field" id="field-pin" style="display:none;">
+        <label class="label">4-Digit PIN</label>
+        <div class="pin-row">
+          <input class="pin-box" maxlength="1" inputmode="numeric" pattern="[0-9]" id="p0">
+          <input class="pin-box" maxlength="1" inputmode="numeric" pattern="[0-9]" id="p1">
+          <input class="pin-box" maxlength="1" inputmode="numeric" pattern="[0-9]" id="p2">
+          <input class="pin-box" maxlength="1" inputmode="numeric" pattern="[0-9]" id="p3">
+        </div>
+      </div>
+
+      <button class="btn" id="btn-continue">Continue</button>
+      <button class="btn btn-ghost" id="btn-back" style="display:none; margin-top:10px;">Back</button>
+
+      <div class="feedback muted" id="feedback"></div>
+    </div>
+    <div class="foot">Heebee Asset OS · Phase 1 Foundation</div>
+  </section>
+
+  <!-- ============== OWNER DASHBOARD ============== -->
+  <section class="panel" id="panel-owner">
+    <div class="glass user-strip">
+      <div class="user-pill">
+        <div class="user-avatar" id="ownerAvatar">G</div>
+        <div class="user-meta">
+          <div class="user-name" id="ownerName">—</div>
+          <div class="user-role">Owner</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+
+    <div class="glass welcome">
+      <h2 class="welcome-title">Welcome back.</h2>
+      <p class="welcome-sub">
+        Phase 1 foundation is live. Login, sessions, sheet structure, and role routing are working.
+        Phase 2 brings the asset registry, drive folders, and photo uploads.
+      </p>
+    </div>
+
+    <div class="section-label">Modules</div>
+    <div class="nav-list">
+      <div class="glass nav-item locked">
+        <div class="nav-left">
+          <div class="nav-icon">◈</div>
+          <div class="nav-text">
+            <div class="nav-title">Asset Registry</div>
+            <div class="nav-sub">Add · view · transfer</div>
+          </div>
+        </div>
+        <span class="phase-tag">Phase 2</span>
+      </div>
+      <div class="glass nav-item locked">
+        <div class="nav-left">
+          <div class="nav-icon">◇</div>
+          <div class="nav-text">
+            <div class="nav-title">Service &amp; Repairs</div>
+            <div class="nav-sub">Workflow · approvals</div>
+          </div>
+        </div>
+        <span class="phase-tag">Phase 3</span>
+      </div>
+      <div class="glass nav-item locked">
+        <div class="nav-left">
+          <div class="nav-icon">◉</div>
+          <div class="nav-text">
+            <div class="nav-title">Vendors &amp; Utilities</div>
+            <div class="nav-sub">Directory · ledger · stockyard</div>
+          </div>
+        </div>
+        <span class="phase-tag">Phase 4</span>
+      </div>
+      <div class="glass nav-item locked">
+        <div class="nav-left">
+          <div class="nav-icon">✦</div>
+          <div class="nav-text">
+            <div class="nav-title">Owner Dashboard</div>
+            <div class="nav-sub">Capital · spend · approvals</div>
+          </div>
+        </div>
+        <span class="phase-tag">Phase 5</span>
+      </div>
+    </div>
+
+    <div class="section-label">System</div>
+    <div class="glass status-card">
+      <div class="status-row">
+        <span class="status-key">App version</span>
+        <span class="status-val" id="ownerVersion">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Outlets active</span>
+        <span class="status-val" id="ownerOutletCount">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Categories active</span>
+        <span class="status-val" id="ownerCatCount">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Phase</span>
+        <span class="phase-tag live">1 · Live</span>
+      </div>
+    </div>
+    <div class="foot" id="ownerFoot">Session active</div>
+  </section>
+
+  <!-- ============== MANAGER DASHBOARD ============== -->
+  <section class="panel" id="panel-manager">
+    <div class="glass user-strip">
+      <div class="user-pill">
+        <div class="user-avatar" id="mgrAvatar">M</div>
+        <div class="user-meta">
+          <div class="user-name" id="mgrName">—</div>
+          <div class="user-role">Manager</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+
+    <div class="glass welcome">
+      <h2 class="welcome-title">Hello.</h2>
+      <p class="welcome-sub">
+        Phase 1 foundation is live. Adding assets, reporting issues, and logging utility expenses
+        will be available from Phase 2 onward.
+      </p>
+    </div>
+
+    <div class="section-label">Modules</div>
+    <div class="nav-list">
+      <div class="glass nav-item locked">
+        <div class="nav-left">
+          <div class="nav-icon">◈</div>
+          <div class="nav-text">
+            <div class="nav-title">Add Asset</div>
+            <div class="nav-sub">Register new equipment</div>
+          </div>
+        </div>
+        <span class="phase-tag">Phase 2</span>
+      </div>
+      <div class="glass nav-item locked">
+        <div class="nav-left">
+          <div class="nav-icon">◇</div>
+          <div class="nav-text">
+            <div class="nav-title">Report Issue</div>
+            <div class="nav-sub">Send for owner approval</div>
+          </div>
+        </div>
+        <span class="phase-tag">Phase 3</span>
+      </div>
+      <div class="glass nav-item locked">
+        <div class="nav-left">
+          <div class="nav-icon">◉</div>
+          <div class="nav-text">
+            <div class="nav-title">Utility Entry</div>
+            <div class="nav-sub">Electricity · diesel · water</div>
+          </div>
+        </div>
+        <span class="phase-tag">Phase 4</span>
+      </div>
+    </div>
+    <div class="foot" id="mgrFoot">Session active</div>
+  </section>
+
+</div>
+
+<script>
+// =====================================================================
+// CONFIG — paste your /exec URL here after deploying Apps Script
+// =====================================================================
+const API_URL = 'PASTE_YOUR_EXEC_URL_HERE';
+
+// =====================================================================
+// API CLIENT
+// =====================================================================
+async function api(action, params) {
+  if (API_URL === 'PASTE_YOUR_EXEC_URL_HERE') {
+    return { ok: false, error: 'API_URL not configured in index.html' };
+  }
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: action, ...(params || {}) }),
+      redirect: 'follow'
+    });
+    return await res.json();
+  } catch (e) {
+    return { ok: false, error: 'Network error: ' + e.message };
+  }
+}
+
+// =====================================================================
+// SESSION
+// =====================================================================
+const SESSION_KEY = 'hb_haos_session';
+const THEME_KEY   = 'hb_haos_theme';
+const SESSION_HOURS = 2;
+
+function getSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
+  catch { return null; }
+}
+function setSession(s) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
+
+function isSessionFresh(s) {
+  if (!s || !s.token || !s.savedAt) return false;
+  const ageMs = Date.now() - s.savedAt;
+  return ageMs < SESSION_HOURS * 60 * 60 * 1000;
+}
+
+// =====================================================================
+// THEME
+// =====================================================================
+function setTheme(t) {
+  document.body.classList.remove('light', 'dark');
+  document.body.classList.add(t);
+  localStorage.setItem(THEME_KEY, t);
+  document.getElementById('themeToggle').textContent = (t === 'dark') ? '◑' : '◐';
+}
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  setTheme(saved || 'light');
+}
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const cur = document.body.classList.contains('dark') ? 'dark' : 'light';
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+// =====================================================================
+// PANEL ROUTING
+// =====================================================================
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// =====================================================================
+// LOGIN FLOW
+// =====================================================================
+const emailInput = document.getElementById('email');
+const fieldEmail = document.getElementById('field-email');
+const fieldPin   = document.getElementById('field-pin');
+const btnContinue= document.getElementById('btn-continue');
+const btnBack    = document.getElementById('btn-back');
+const feedback   = document.getElementById('feedback');
+const pinBoxes   = [0,1,2,3].map(i => document.getElementById('p'+i));
+
+let stage = 'email';
+let workingEmail = '';
+
+function setFeedback(text, kind) {
+  feedback.textContent = text || '';
+  feedback.className = 'feedback ' + (kind || 'muted');
+}
+
+function goToPinStage(email) {
+  stage = 'pin';
+  workingEmail = email;
+  fieldEmail.style.display = 'none';
+  fieldPin.style.display = 'block';
+  btnContinue.style.display = 'none';
+  btnBack.style.display = 'block';
+  setFeedback('Enter your 4-digit PIN', 'muted');
+  setTimeout(() => pinBoxes[0].focus(), 200);
+}
+
+function goBackToEmail() {
+  stage = 'email';
+  workingEmail = '';
+  fieldEmail.style.display = 'block';
+  fieldPin.style.display = 'none';
+  btnContinue.style.display = 'block';
+  btnBack.style.display = 'none';
+  pinBoxes.forEach(b => b.value = '');
+  setFeedback('', 'muted');
+  setTimeout(() => emailInput.focus(), 200);
+}
+
+btnContinue.addEventListener('click', () => {
+  const email = emailInput.value.trim().toLowerCase();
+  if (!email) { setFeedback('Email required', 'err'); return; }
+  if (!email.includes('@')) { setFeedback('Enter a valid email', 'err'); return; }
+  goToPinStage(email);
+});
+
+emailInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); btnContinue.click(); }
+});
+
+btnBack.addEventListener('click', goBackToEmail);
+
+pinBoxes.forEach((box, i) => {
+  box.addEventListener('input', (e) => {
+    const v = e.target.value.replace(/\D/g, '');
+    e.target.value = v;
+    if (v && i < 3) pinBoxes[i+1].focus();
+    if (v && i === 3) submitLogin();
+  });
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' && !e.target.value && i > 0) {
+      pinBoxes[i-1].focus();
+    }
+    if (e.key === 'Enter' && i === 3) submitLogin();
+  });
+  box.addEventListener('paste', (e) => {
+    const pasted = (e.clipboardData.getData('text') || '').replace(/\D/g, '');
+    if (pasted.length === 4) {
+      e.preventDefault();
+      pasted.split('').forEach((d, j) => pinBoxes[j].value = d);
+      submitLogin();
+    }
+  });
+});
+
+async function submitLogin() {
+  const pin = pinBoxes.map(b => b.value).join('');
+  if (pin.length !== 4) { setFeedback('Complete the PIN', 'err'); return; }
+
+  setFeedback('<span class="spinner"></span>Signing in', 'muted');
+  pinBoxes.forEach(b => b.disabled = true);
+
+  const res = await api('validatePin', { email: workingEmail, pin: pin });
+
+  pinBoxes.forEach(b => b.disabled = false);
+
+  if (!res.ok) {
+    setFeedback(res.error || 'Login failed', 'err');
+    pinBoxes.forEach(b => b.value = '');
+    pinBoxes[0].focus();
+    return;
+  }
+
+  setSession({
+    token: res.token,
+    user:  res.user,
+    savedAt: Date.now()
+  });
+
+  setFeedback('Signed in', 'ok');
+  await routeToRole(res.user);
+}
+
+// =====================================================================
+// ROLE ROUTING + DASHBOARD HYDRATION
+// =====================================================================
+async function routeToRole(user) {
+  const initials = (user.name || user.email || '?').trim()[0].toUpperCase();
+
+  if (user.role === 'Owner') {
+    document.getElementById('ownerName').textContent = user.name || user.email;
+    document.getElementById('ownerAvatar').textContent = initials;
+    showPanel('panel-owner');
+    hydrateOwner();
+  } else if (user.role === 'Manager') {
+    document.getElementById('mgrName').textContent = user.name || user.email;
+    document.getElementById('mgrAvatar').textContent = initials;
+    showPanel('panel-manager');
+    hydrateManager();
+  } else {
+    setFeedback('Unknown role: ' + user.role, 'err');
+    return;
+  }
+  startHeartbeat();
+  startIdleWatcher();
+}
+
+async function hydrateOwner() {
+  const s = getSession();
+  if (!s) return;
+
+  const meta = await api('getAppMeta', { token: s.token });
+  if (meta.ok) {
+    document.getElementById('ownerVersion').textContent = meta.version;
+  }
+
+  const out = await api('getOutlets', { token: s.token });
+  if (out.ok) {
+    document.getElementById('ownerOutletCount').textContent = out.outlets.length;
+  }
+
+  const cats = await api('getCategories', { token: s.token });
+  if (cats.ok) {
+    document.getElementById('ownerCatCount').textContent = cats.categories.length;
+  }
+}
+
+async function hydrateManager() {
+  const s = getSession();
+  if (!s) return;
+  const meta = await api('getAppMeta', { token: s.token });
+  if (meta.ok) {
+    document.getElementById('mgrFoot').textContent = 'Session active · ' + meta.version;
+  }
+}
+
+// =====================================================================
+// LOGOUT
+// =====================================================================
+async function logout() {
+  const s = getSession();
+  if (s && s.token) await api('logout', { token: s.token });
+  clearSession();
+  stopHeartbeat();
+  goBackToEmail();
+  showPanel('panel-login');
+  setFeedback('Logged out', 'muted');
+}
+
+// =====================================================================
+// HEARTBEAT (presence) + IDLE WATCHER (auto-logout)
+// =====================================================================
+let heartbeatId = null;
+let idleId = null;
+
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatId = setInterval(async () => {
+    const s = getSession();
+    if (!s) { stopHeartbeat(); return; }
+    const r = await api('pingPresence', { token: s.token });
+    if (!r.ok) { logout(); }
+  }, 30000);
+}
+function stopHeartbeat() {
+  if (heartbeatId) { clearInterval(heartbeatId); heartbeatId = null; }
+}
+
+function startIdleWatcher() {
+  if (idleId) clearInterval(idleId);
+  idleId = setInterval(() => {
+    const s = getSession();
+    if (!s) { clearInterval(idleId); idleId = null; return; }
+    if (!isSessionFresh(s)) { logout(); }
+  }, 60000);
+}
+
+// =====================================================================
+// AUTO-RESUME ON LOAD
+// =====================================================================
+async function init() {
+  initTheme();
+
+  const s = getSession();
+  if (s && isSessionFresh(s)) {
+    const r = await api('getCurrentUser', { token: s.token });
+    if (r.ok) {
+      await routeToRole(r.user);
+      return;
+    }
+  }
+  clearSession();
+  showPanel('panel-login');
+  setTimeout(() => emailInput.focus(), 300);
+}
+
+init();
+</script>
+</body>
+</html>
