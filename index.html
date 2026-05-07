@@ -651,6 +651,93 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
 }
 
 /* =====================================================================
+   ASSET LIST
+   ===================================================================== */
+.filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.filter-select {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.48rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 10px 24px 10px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--input-bdr);
+  background: var(--input-bg);
+  color: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2386868b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+  width: 100%;
+}
+.asset-list { display: grid; gap: 8px; padding-bottom: 80px; }
+.asset-card {
+  padding: 16px 18px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s, transform 0.15s;
+}
+.asset-card:hover { transform: translateX(2px); }
+.asset-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+.asset-code {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--gold);
+  letter-spacing: 1.5px;
+}
+.asset-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.48rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.asset-name {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 400;
+  font-size: 0.95rem;
+  color: var(--text);
+  margin-bottom: 4px;
+  padding-right: 20px;
+}
+.asset-meta {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.48rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.asset-chevron {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text3);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* =====================================================================
    FOOTER
    ===================================================================== */
 .foot {
@@ -857,16 +944,34 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
     <div class="foot" id="mgrFoot">Session active</div>
   </section>
 
-  <!-- ============== ASSET REGISTRY (list — CP-4) ============== -->
+  <!-- ============== ASSET REGISTRY ============== -->
   <section class="panel" id="panel-asset-registry">
     <div class="panel-hdr">
       <button class="back-btn" onclick="goToDashboard()">‹</button>
       <h2 class="panel-title">Asset Registry</h2>
     </div>
-    <div class="glass empty-state">
-      <div class="empty-icon">◈</div>
-      <div class="empty-text">Assets load in CP-4 · tap + to add</div>
+
+    <div class="filter-row">
+      <select class="filter-select" id="af-outlet" onchange="applyAssetFilters()">
+        <option value="">All outlets</option>
+      </select>
+      <select class="filter-select" id="af-category" onchange="applyAssetFilters()">
+        <option value="">All types</option>
+      </select>
+      <select class="filter-select" id="af-status" onchange="applyAssetFilters()">
+        <option value="">All status</option>
+        <option value="active">Active</option>
+        <option value="stockyard">Stockyard</option>
+        <option value="disposed">Disposed</option>
+      </select>
     </div>
+
+    <div id="registry-empty" class="glass empty-state" style="display:none;">
+      <div class="empty-icon">◈</div>
+      <div class="empty-text">No assets found</div>
+    </div>
+    <div class="asset-list" id="asset-list-container"></div>
+
     <button class="fab" onclick="openAddAsset()">+</button>
   </section>
 
@@ -1282,6 +1387,7 @@ init();
 // =====================================================================
 let _outlets = [];
 let _categories = [];
+let _allAssets = [];
 
 function goToDashboard() {
   const s = getSession();
@@ -1289,8 +1395,104 @@ function goToDashboard() {
   showPanel(s.user.role === 'Owner' ? 'panel-owner' : 'panel-manager');
 }
 
-function openAssetRegistry() {
+async function openAssetRegistry() {
   showPanel('panel-asset-registry');
+  await refreshAssetList();
+}
+
+async function refreshAssetList() {
+  const s = getSession();
+  if (!s) return;
+
+  // Ensure dropdowns are populated
+  if (_outlets.length === 0) {
+    const r = await api('getOutlets', { token: s.token });
+    if (r.ok) _outlets = r.outlets;
+  }
+  if (_categories.length === 0) {
+    const r = await api('getCategories', { token: s.token });
+    if (r.ok) _categories = r.categories;
+  }
+  populateFilterDropdowns();
+
+  // Loading state
+  document.getElementById('registry-empty').style.display = 'none';
+  document.getElementById('asset-list-container').innerHTML =
+    '<div style="text-align:center;padding:40px 0;">' +
+    '<div class="loader"><div class="loader-dot"></div>' +
+    '<div class="loader-label"><span class="loader-label-text">Loading</span></div></div></div>';
+
+  const res = await api('listAssets', { token: s.token, filters: {} });
+  if (!res.ok) {
+    document.getElementById('asset-list-container').innerHTML = '';
+    return;
+  }
+  _allAssets = res.assets;
+  applyAssetFilters();
+}
+
+function populateFilterDropdowns() {
+  const outletSel = document.getElementById('af-outlet');
+  if (outletSel.options.length <= 1) {
+    _outlets.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.code; opt.textContent = o.name;
+      outletSel.appendChild(opt);
+    });
+  }
+  const catSel = document.getElementById('af-category');
+  if (catSel.options.length <= 1) {
+    _categories.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.code; opt.textContent = c.name;
+      catSel.appendChild(opt);
+    });
+  }
+}
+
+function applyAssetFilters() {
+  const outlet   = document.getElementById('af-outlet').value;
+  const category = document.getElementById('af-category').value;
+  const status   = document.getElementById('af-status').value;
+
+  let list = _allAssets;
+  if (outlet)   list = list.filter(a => a.outlet === outlet);
+  if (category) list = list.filter(a => a.category === category);
+  if (status)   list = list.filter(a => a.status === status);
+
+  const container = document.getElementById('asset-list-container');
+  const empty     = document.getElementById('registry-empty');
+
+  if (list.length === 0) {
+    container.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  container.innerHTML = list.map(assetCardHTML).join('');
+}
+
+function assetCardHTML(a) {
+  const statusColor = { active: 'var(--success)', stockyard: 'var(--warning)', disposed: 'var(--danger)' };
+  const dot   = statusColor[a.status] || 'var(--text3)';
+  const cat   = (_categories.find(c => c.code === a.category) || {}).name || a.category;
+  const meta  = [a.outlet, cat, a.location].filter(Boolean).join(' · ');
+  return '<div class="glass asset-card" onclick="openAssetDetail(\'' + a.code + '\')">' +
+    '<div class="asset-card-top">' +
+      '<span class="asset-code">' + a.code + '</span>' +
+      '<span class="asset-status-pill">' +
+        '<span class="status-dot" style="background:' + dot + ';"></span>' +
+        a.status +
+      '</span>' +
+    '</div>' +
+    '<div class="asset-name">' + a.name + '</div>' +
+    '<div class="asset-meta">' + meta + '</div>' +
+    '<div class="asset-chevron">›</div>' +
+  '</div>';
+}
+
+function openAssetDetail(code) {
+  // CP-5
 }
 
 async function openAddAsset() {
