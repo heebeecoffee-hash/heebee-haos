@@ -1397,6 +1397,20 @@ function goToDashboard() {
 
 async function openAssetRegistry() {
   showPanel('panel-asset-registry');
+
+  if (_allAssets.length > 0) {
+    // Cache hit — render immediately, refresh silently in background
+    applyAssetFilters();
+  } else {
+    // First load — show loader NOW before any async work, then let browser paint
+    document.getElementById('registry-empty').style.display = 'none';
+    document.getElementById('asset-list-container').innerHTML =
+      '<div style="text-align:center;padding:40px 0;">' +
+      '<div class="loader"><div class="loader-dot"></div>' +
+      '<div class="loader-label"><span class="loader-label-text">Loading</span></div></div></div>';
+    await new Promise(r => requestAnimationFrame(r));
+  }
+
   await refreshAssetList();
 }
 
@@ -1404,7 +1418,7 @@ async function refreshAssetList() {
   const s = getSession();
   if (!s) return;
 
-  // Ensure dropdowns are populated
+  // Load outlets + categories if not cached (for filter dropdowns)
   if (_outlets.length === 0) {
     const r = await api('getOutlets', { token: s.token });
     if (r.ok) _outlets = r.outlets;
@@ -1415,18 +1429,6 @@ async function refreshAssetList() {
   }
   populateFilterDropdowns();
 
-  // Render cache instantly if available; show loader only on first visit
-  if (_allAssets.length > 0) {
-    applyAssetFilters();
-  } else {
-    document.getElementById('registry-empty').style.display = 'none';
-    document.getElementById('asset-list-container').innerHTML =
-      '<div style="text-align:center;padding:40px 0;">' +
-      '<div class="loader"><div class="loader-dot"></div>' +
-      '<div class="loader-label"><span class="loader-label-text">Loading</span></div></div></div>';
-  }
-
-  // Always refresh in background — silent update after add/edit
   const res = await api('listAssets', { token: s.token, filters: {} });
   if (!res.ok) return;
   _allAssets = res.assets;
