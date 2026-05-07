@@ -1062,6 +1062,101 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
     <div class="feedback muted" id="fa-feedback" style="margin-bottom:40px;"></div>
   </section>
 
+  <!-- ============== ASSET DETAIL ============== -->
+  <section class="panel" id="panel-asset-detail">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="closeAssetDetail()">‹</button>
+      <h2 class="panel-title" id="detail-code" style="flex:1;font-family:'Space Mono',monospace;font-size:0.7rem;letter-spacing:2px;color:var(--gold);margin:0;"></h2>
+      <button class="back-btn" id="detail-edit-btn" onclick="toggleEditMode()" style="font-size:15px;">✎</button>
+    </div>
+
+    <!-- VIEW MODE -->
+    <div id="detail-view">
+      <div class="glass" style="padding:22px 24px;margin-bottom:10px;">
+        <div style="font-family:'Nunito Sans',sans-serif;font-weight:200;font-size:1.3rem;letter-spacing:0.5px;margin-bottom:10px;" id="detail-name"></div>
+        <div id="detail-status-pill"></div>
+      </div>
+      <div class="glass status-card" id="detail-fields"></div>
+      <div class="glass empty-state" style="margin-top:10px;padding:28px;">
+        <div class="empty-icon">◇</div>
+        <div class="empty-text">Photos · Phase 2.5</div>
+      </div>
+      <div class="foot" id="detail-foot" style="margin-top:20px;margin-bottom:40px;"></div>
+    </div>
+
+    <!-- EDIT MODE -->
+    <div id="detail-edit" style="display:none;">
+      <div class="glass form-card">
+        <div class="field">
+          <label class="label">Asset Name</label>
+          <input type="text" class="input" id="de-name">
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label class="label">Purchase Date</label>
+            <input type="date" class="input" id="de-purchase-date">
+          </div>
+          <div class="field" id="de-value-field">
+            <label class="label">Value ₹</label>
+            <input type="number" class="input" id="de-purchase-value" placeholder="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label class="label">Vendor Purchased From</label>
+            <input type="text" class="input" id="de-vendor" placeholder="Vendor name">
+          </div>
+          <div class="field">
+            <label class="label">Warranty Until</label>
+            <input type="date" class="input" id="de-warranty">
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Location</label>
+          <input type="text" class="input" id="de-location" placeholder="e.g. Bar counter">
+        </div>
+        <div class="field">
+          <label class="label">Status</label>
+          <select class="input" id="de-status">
+            <option value="active">Active</option>
+            <option value="stockyard">Stockyard</option>
+            <option value="disposed">Disposed</option>
+          </select>
+        </div>
+        <div class="toggle-row" style="margin-top:8px;">
+          <span class="toggle-label">Serviceable</span>
+          <label class="toggle">
+            <input type="checkbox" id="de-serviceable" onchange="onDeServiceableChange()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+        <div class="service-fields" id="de-service-fields" style="display:none;">
+          <div class="field">
+            <label class="label">Service Type</label>
+            <select class="input" id="de-service-type">
+              <option value="on-call">On-call</option>
+              <option value="3-monthly">3-Monthly</option>
+              <option value="6-monthly">6-Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label">Service Frequency (months)</label>
+            <input type="number" class="input" id="de-service-freq" placeholder="6" min="1">
+          </div>
+        </div>
+        <div class="field" style="margin-top:8px;">
+          <label class="label">Notes</label>
+          <textarea class="input" id="de-notes" placeholder="Notes…"></textarea>
+        </div>
+      </div>
+      <button class="btn" id="de-save-btn" onclick="submitUpdateAsset()" style="margin-top:16px;">Save Changes</button>
+      <button class="btn btn-ghost" onclick="cancelEdit()" style="margin-top:8px;">Cancel</button>
+      <div class="feedback muted" id="de-feedback" style="margin-bottom:40px;"></div>
+    </div>
+  </section>
+
 </div>
 
 <script>
@@ -1494,8 +1589,180 @@ function assetCardHTML(a) {
   '</div>';
 }
 
-function openAssetDetail(code) {
-  // CP-5
+// =====================================================================
+// ASSET DETAIL + EDIT
+// =====================================================================
+let _currentAsset = null;
+
+function closeAssetDetail() {
+  showPanel('panel-asset-registry');
+}
+
+async function openAssetDetail(code) {
+  showPanel('panel-asset-detail');
+  document.getElementById('detail-edit').style.display = 'none';
+  document.getElementById('detail-view').style.display = 'block';
+  document.getElementById('detail-edit-btn').textContent = '✎';
+
+  // Render from cache immediately
+  const cached = _allAssets.find(a => a.code === code);
+  const s = getSession();
+  if (cached) {
+    _currentAsset = cached;
+    renderAssetDetail(cached, s ? s.user.role : 'Manager');
+  } else {
+    document.getElementById('detail-code').textContent = code;
+    document.getElementById('detail-name').textContent = '';
+    document.getElementById('detail-fields').innerHTML =
+      '<div style="padding:24px;text-align:center;"><div class="loader"><div class="loader-dot"></div></div></div>';
+  }
+
+  // Fresh fetch in background for complete data
+  if (!s) return;
+  const res = await api('getAsset', { token: s.token, code: code });
+  if (!res.ok) return;
+  _currentAsset = res.asset;
+  renderAssetDetail(res.asset, s.user.role);
+}
+
+function renderAssetDetail(asset, role) {
+  document.getElementById('detail-code').textContent = asset.code;
+  document.getElementById('detail-name').textContent = asset.name;
+
+  const statusColor = { active: 'var(--success)', stockyard: 'var(--warning)', disposed: 'var(--danger)' };
+  const dot = statusColor[asset.status] || 'var(--text3)';
+  document.getElementById('detail-status-pill').innerHTML =
+    '<div class="asset-status-pill">' +
+    '<span class="status-dot" style="background:' + dot + ';"></span>' +
+    asset.status + '</div>';
+
+  const outletName = (_outlets.find(o => o.code === asset.outlet) || {}).name || asset.outlet;
+  const catName    = (_categories.find(c => c.code === asset.category) || {}).name || asset.category;
+
+  const rows = [
+    ['Outlet',   outletName],
+    ['Category', catName],
+    ['Location', asset.location || '—'],
+    ['Purchase Date', asset.purchase_date || '—'],
+    role === 'Owner' ? ['Value ₹', asset.purchase_value !== '' && asset.purchase_value !== undefined
+      ? '₹' + Number(asset.purchase_value).toLocaleString('en-IN') : '—'] : null,
+    ['Vendor',   asset.vendor_purchased || '—'],
+    ['Warranty', asset.warranty_until   || '—'],
+    ['Serviceable', asset.serviceable ? 'Yes' : 'No'],
+    asset.serviceable ? ['Service Type', asset.service_type || '—'] : null,
+    asset.serviceable ? ['Frequency',    asset.service_frequency_months
+      ? asset.service_frequency_months + ' months' : '—'] : null,
+    ['Last Service', asset.last_service_date || '—'],
+    ['Notes',   asset.notes || '—'],
+    ['Added by', asset.created_by || '—'],
+    ['Added on', asset.created_at ? asset.created_at.slice(0, 10) : '—'],
+  ].filter(Boolean);
+
+  document.getElementById('detail-fields').innerHTML = rows.map(([k, v]) =>
+    '<div class="status-row">' +
+      '<span class="status-key">' + k + '</span>' +
+      '<span class="status-val" style="text-align:right;max-width:58%;word-break:break-word;">' + v + '</span>' +
+    '</div>'
+  ).join('');
+
+  document.getElementById('detail-foot').textContent =
+    asset.drive_folder_id ? 'Drive folder linked' : 'No Drive folder';
+}
+
+function toggleEditMode() {
+  const editing = document.getElementById('detail-edit').style.display !== 'none';
+  editing ? cancelEdit() : openEditMode();
+}
+
+function openEditMode() {
+  if (!_currentAsset) return;
+  const s = getSession();
+  const role = s ? s.user.role : 'Manager';
+
+  document.getElementById('de-name').value          = _currentAsset.name || '';
+  document.getElementById('de-purchase-date').value = _currentAsset.purchase_date || '';
+  document.getElementById('de-vendor').value        = _currentAsset.vendor_purchased || '';
+  document.getElementById('de-warranty').value      = _currentAsset.warranty_until || '';
+  document.getElementById('de-location').value      = _currentAsset.location || '';
+  document.getElementById('de-status').value        = _currentAsset.status || 'active';
+  document.getElementById('de-notes').value         = _currentAsset.notes || '';
+
+  document.getElementById('de-value-field').style.display = role === 'Owner' ? '' : 'none';
+  if (role === 'Owner') {
+    document.getElementById('de-purchase-value').value = _currentAsset.purchase_value || '';
+  }
+
+  const svc = _currentAsset.serviceable === true || _currentAsset.serviceable === 'true';
+  document.getElementById('de-serviceable').checked = svc;
+  document.getElementById('de-service-fields').style.display = svc ? 'block' : 'none';
+  if (svc) {
+    document.getElementById('de-service-type').value = _currentAsset.service_type || '6-monthly';
+    document.getElementById('de-service-freq').value = _currentAsset.service_frequency_months || '';
+  }
+
+  document.getElementById('detail-view').style.display = 'none';
+  document.getElementById('detail-edit').style.display = 'block';
+  document.getElementById('detail-edit-btn').textContent = '✕';
+  setDeFeedback('', 'muted');
+}
+
+function cancelEdit() {
+  document.getElementById('detail-edit').style.display = 'none';
+  document.getElementById('detail-view').style.display = 'block';
+  document.getElementById('detail-edit-btn').textContent = '✎';
+}
+
+function onDeServiceableChange() {
+  document.getElementById('de-service-fields').style.display =
+    document.getElementById('de-serviceable').checked ? 'block' : 'none';
+}
+
+function setDeFeedback(text, kind) {
+  const el = document.getElementById('de-feedback');
+  el.textContent = text;
+  el.className = 'feedback ' + (kind || 'muted');
+}
+
+async function submitUpdateAsset() {
+  const s = getSession();
+  if (!s || !_currentAsset) return;
+
+  const name = document.getElementById('de-name').value.trim();
+  if (!name) { setDeFeedback('Name required', 'err'); return; }
+
+  const serviceable = document.getElementById('de-serviceable').checked;
+  const payload = {
+    name,
+    purchase_date:            document.getElementById('de-purchase-date').value || '',
+    vendor_purchased:         document.getElementById('de-vendor').value.trim(),
+    warranty_until:           document.getElementById('de-warranty').value || '',
+    serviceable,
+    service_type:             serviceable ? document.getElementById('de-service-type').value : '',
+    service_frequency_months: serviceable ? (Number(document.getElementById('de-service-freq').value) || '') : '',
+    location: document.getElementById('de-location').value.trim(),
+    status:   document.getElementById('de-status').value,
+    notes:    document.getElementById('de-notes').value.trim()
+  };
+  if (s.user.role === 'Owner') {
+    const v = document.getElementById('de-purchase-value').value;
+    payload.purchase_value = v !== '' ? Number(v) : '';
+  }
+
+  const btn = document.getElementById('de-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  setDeFeedback('', 'muted');
+
+  const res = await api('updateAsset', { token: s.token, code: _currentAsset.code, payload });
+  btn.disabled = false; btn.textContent = 'Save Changes';
+
+  if (!res.ok) { setDeFeedback(res.error || 'Failed to save', 'err'); return; }
+
+  // Update caches
+  Object.assign(_currentAsset, payload);
+  _allAssets = _allAssets.map(a => a.code === _currentAsset.code ? Object.assign({}, a, payload) : a);
+
+  cancelEdit();
+  renderAssetDetail(_currentAsset, s.user.role);
 }
 
 async function openAddAsset() {
