@@ -466,17 +466,75 @@ body.dark .phase-tag.live { background: rgba(81,207,102,0.12); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.spinner {
-  width: 18px; height: 18px;
-  border: 2px solid var(--input-bdr);
-  border-top-color: var(--gold);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  display: inline-block;
-  vertical-align: -3px;
-  margin-right: 8px;
+/* =====================================================================
+   LUXURY LOADER — pulsing gold dot + crossfade label
+   ===================================================================== */
+.loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0 4px;
+  animation: loaderEnter 0.4s cubic-bezier(0.4,0,0.2,1) both;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes loaderEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.loader-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 0 rgba(184,134,11,0.45);
+  animation: dotPulse 1.4s cubic-bezier(0.4,0,0.6,1) infinite;
+}
+body.dark .loader-dot {
+  box-shadow: 0 0 0 0 rgba(240,192,64,0.55);
+}
+@keyframes dotPulse {
+  0%, 100% {
+    transform: scale(0.75);
+    opacity: 0.45;
+    box-shadow: 0 0 0 0 rgba(184,134,11,0.45);
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+    box-shadow: 0 0 0 8px rgba(184,134,11,0);
+  }
+}
+
+.loader-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--text3);
+  min-height: 14px;
+  position: relative;
+}
+.loader-label-text {
+  display: inline-block;
+  animation: labelFade 0.45s cubic-bezier(0.4,0,0.2,1) both;
+}
+@keyframes labelFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Success burst — momentary glow on PIN boxes when auth succeeds */
+.pin-box.auth-ok {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 4px rgba(184,134,11,0.18) !important;
+  animation: pinSuccess 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+@keyframes pinSuccess {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
 
 /* =====================================================================
    FOOTER
@@ -837,23 +895,43 @@ pinBoxes.forEach((box, i) => {
   });
 });
 
+function showLoader(label) {
+  feedback.className = 'feedback muted';
+  feedback.innerHTML =
+    '<div class="loader">' +
+      '<div class="loader-dot"></div>' +
+      '<div class="loader-label"><span class="loader-label-text" key="' + Date.now() + '">' + label + '</span></div>' +
+    '</div>';
+}
+
+function updateLoaderLabel(label) {
+  const el = feedback.querySelector('.loader-label');
+  if (!el) return;
+  el.innerHTML = '<span class="loader-label-text">' + label + '</span>';
+}
+
 async function submitLogin() {
   const pin = pinBoxes.map(b => b.value).join('');
   if (pin.length !== 4) { setFeedback('Complete the PIN', 'err'); return; }
 
-  setFeedback('<span class="spinner"></span>Signing in', 'muted');
+  showLoader('Signing in');
   pinBoxes.forEach(b => b.disabled = true);
 
   const res = await api('validatePin', { email: workingEmail, pin: pin });
 
-  pinBoxes.forEach(b => b.disabled = false);
-
   if (!res.ok) {
+    pinBoxes.forEach(b => b.disabled = false);
     setFeedback(res.error || 'Login failed', 'err');
     pinBoxes.forEach(b => b.value = '');
     pinBoxes[0].focus();
     return;
   }
+
+  // Success — momentary glow on PIN boxes
+  pinBoxes.forEach(b => b.classList.add('auth-ok'));
+  updateLoaderLabel('Verifying');
+
+  await new Promise(r => setTimeout(r, 350));
 
   setSession({
     token: res.token,
@@ -861,7 +939,11 @@ async function submitLogin() {
     savedAt: Date.now()
   });
 
-  setFeedback('Signed in', 'ok');
+  updateLoaderLabel('Welcome');
+  await new Promise(r => setTimeout(r, 450));
+
+  pinBoxes.forEach(b => { b.classList.remove('auth-ok'); b.disabled = false; });
+
   await routeToRole(res.user);
 }
 
