@@ -948,7 +948,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
   <section class="panel" id="panel-asset-registry">
     <div class="panel-hdr">
       <button class="back-btn" onclick="goToDashboard()">‹</button>
-      <h2 class="panel-title">Asset Registry</h2>
+      <h2 class="panel-title" style="flex:1;">Asset Registry</h2>
+      <button class="back-btn" onclick="openAddAsset()" style="font-size:22px; color:var(--gold); border-color:var(--gold);">+</button>
     </div>
 
     <div class="filter-row">
@@ -971,8 +972,6 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
       <div class="empty-text">No assets found</div>
     </div>
     <div class="asset-list" id="asset-list-container"></div>
-
-    <button class="fab" onclick="openAddAsset()">+</button>
   </section>
 
   <!-- ============== ADD ASSET ============== -->
