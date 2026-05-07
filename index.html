@@ -537,6 +537,120 @@ body.dark .loader-dot {
 }
 
 /* =====================================================================
+   PANEL HEADER + BACK BUTTON
+   ===================================================================== */
+.panel-hdr {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 0 16px;
+}
+.back-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--text2);
+  cursor: pointer; flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+}
+.back-btn:hover { border-color: var(--gold); color: var(--gold); }
+.panel-title {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 200;
+  font-size: 1.4rem;
+  letter-spacing: 1px;
+  color: var(--text);
+  margin: 0;
+}
+
+/* =====================================================================
+   FORM
+   ===================================================================== */
+select.input {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2386868b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
+.form-card { padding: 24px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Serviceable toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border2);
+}
+.toggle-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track {
+  position: absolute; inset: 0;
+  border-radius: 99px;
+  background: var(--border2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.25s, border-color 0.25s;
+}
+.toggle input:checked + .toggle-track { background: var(--gold); border-color: var(--gold); }
+.toggle-thumb {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transition: transform 0.25s;
+  pointer-events: none;
+}
+.toggle input:checked ~ .toggle-thumb { transform: translateX(18px); }
+.service-fields { margin-top: 16px; }
+
+/* FAB */
+.fab {
+  position: fixed; bottom: 28px; right: 24px;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: none;
+  font-size: 24px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow2);
+  cursor: pointer;
+  z-index: 50;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.fab:hover { transform: scale(1.08); box-shadow: 0 12px 40px rgba(0,0,0,0.18); }
+
+/* Empty state */
+.empty-state { padding: 48px 24px; text-align: center; }
+.empty-icon { font-size: 1.8rem; color: var(--text3); margin-bottom: 12px; }
+.empty-text {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+/* =====================================================================
    FOOTER
    ===================================================================== */
 .foot {
@@ -622,7 +736,7 @@ body.dark .loader-dot {
 
     <div class="section-label">Modules</div>
     <div class="nav-list">
-      <div class="glass nav-item locked">
+      <div class="glass nav-item" onclick="openAssetRegistry()">
         <div class="nav-left">
           <div class="nav-icon">◈</div>
           <div class="nav-text">
@@ -630,7 +744,7 @@ body.dark .loader-dot {
             <div class="nav-sub">Add · view · transfer</div>
           </div>
         </div>
-        <span class="phase-tag">Phase 2</span>
+        <span class="phase-tag live">Live</span>
       </div>
       <div class="glass nav-item locked">
         <div class="nav-left">
@@ -709,7 +823,7 @@ body.dark .loader-dot {
 
     <div class="section-label">Modules</div>
     <div class="nav-list">
-      <div class="glass nav-item locked">
+      <div class="glass nav-item" onclick="openAssetRegistry()">
         <div class="nav-left">
           <div class="nav-icon">◈</div>
           <div class="nav-text">
@@ -717,7 +831,7 @@ body.dark .loader-dot {
             <div class="nav-sub">Register new equipment</div>
           </div>
         </div>
-        <span class="phase-tag">Phase 2</span>
+        <span class="phase-tag live">Live</span>
       </div>
       <div class="glass nav-item locked">
         <div class="nav-left">
@@ -741,6 +855,107 @@ body.dark .loader-dot {
       </div>
     </div>
     <div class="foot" id="mgrFoot">Session active</div>
+  </section>
+
+  <!-- ============== ASSET REGISTRY (list — CP-4) ============== -->
+  <section class="panel" id="panel-asset-registry">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="goToDashboard()">‹</button>
+      <h2 class="panel-title">Asset Registry</h2>
+    </div>
+    <div class="glass empty-state">
+      <div class="empty-icon">◈</div>
+      <div class="empty-text">Assets load in CP-4 · tap + to add</div>
+    </div>
+    <button class="fab" onclick="openAddAsset()">+</button>
+  </section>
+
+  <!-- ============== ADD ASSET ============== -->
+  <section class="panel" id="panel-add-asset">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="showPanel('panel-asset-registry')">‹</button>
+      <h2 class="panel-title">Add Asset</h2>
+    </div>
+
+    <div class="glass form-card">
+      <div class="field">
+        <label class="label">Outlet</label>
+        <select class="input" id="fa-outlet"></select>
+      </div>
+      <div class="field">
+        <label class="label">Category</label>
+        <select class="input" id="fa-category" onchange="onCategoryChange()"></select>
+      </div>
+      <div class="field">
+        <label class="label">Asset Name</label>
+        <input type="text" class="input" id="fa-name" placeholder="e.g. La Marzocco GS3">
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label class="label">Purchase Date</label>
+          <input type="date" class="input" id="fa-purchase-date">
+        </div>
+        <div class="field" id="fa-value-field">
+          <label class="label">Value ₹</label>
+          <input type="number" class="input" id="fa-purchase-value" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label class="label">Vendor Purchased From</label>
+          <input type="text" class="input" id="fa-vendor" placeholder="Vendor name">
+        </div>
+        <div class="field">
+          <label class="label">Warranty Until</label>
+          <input type="date" class="input" id="fa-warranty">
+        </div>
+      </div>
+      <div class="field">
+        <label class="label">Location</label>
+        <input type="text" class="input" id="fa-location" placeholder="e.g. Bar counter, Floor 1">
+      </div>
+      <div class="field">
+        <label class="label">Status</label>
+        <select class="input" id="fa-status">
+          <option value="active">Active</option>
+          <option value="stockyard">Stockyard</option>
+          <option value="disposed">Disposed</option>
+        </select>
+      </div>
+
+      <div class="toggle-row" style="margin-top:8px;">
+        <span class="toggle-label">Serviceable</span>
+        <label class="toggle">
+          <input type="checkbox" id="fa-serviceable" onchange="onServiceableChange()">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+
+      <div class="service-fields" id="fa-service-fields" style="display:none;">
+        <div class="field">
+          <label class="label">Service Type</label>
+          <select class="input" id="fa-service-type">
+            <option value="on-call">On-call</option>
+            <option value="3-monthly">3-Monthly</option>
+            <option value="6-monthly" selected>6-Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label">Service Frequency (months)</label>
+          <input type="number" class="input" id="fa-service-freq" placeholder="6" min="1">
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:8px;">
+        <label class="label">Notes</label>
+        <textarea class="input" id="fa-notes" placeholder="Any notes about this asset…"></textarea>
+      </div>
+    </div>
+
+    <button class="btn" id="fa-submit" onclick="submitAddAsset()" style="margin-top:16px;">Add Asset</button>
+    <div class="feedback muted" id="fa-feedback" style="margin-bottom:40px;"></div>
   </section>
 
 </div>
@@ -1061,6 +1276,148 @@ async function init() {
 }
 
 init();
+
+// =====================================================================
+// ASSET REGISTRY
+// =====================================================================
+let _outlets = [];
+let _categories = [];
+
+function goToDashboard() {
+  const s = getSession();
+  if (!s) return;
+  showPanel(s.user.role === 'Owner' ? 'panel-owner' : 'panel-manager');
+}
+
+function openAssetRegistry() {
+  showPanel('panel-asset-registry');
+}
+
+async function openAddAsset() {
+  showPanel('panel-add-asset');
+  await loadAssetFormData();
+}
+
+async function loadAssetFormData() {
+  const s = getSession();
+  if (!s) return;
+
+  // Hide purchase value for Manager
+  document.getElementById('fa-value-field').style.display =
+    s.user.role === 'Owner' ? '' : 'none';
+
+  // Outlets
+  if (_outlets.length === 0) {
+    const res = await api('getOutlets', { token: s.token });
+    if (res.ok) _outlets = res.outlets;
+  }
+  const outletSel = document.getElementById('fa-outlet');
+  outletSel.innerHTML = '<option value="">Select outlet…</option>';
+  _outlets.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.code;
+    opt.textContent = o.name;
+    outletSel.appendChild(opt);
+  });
+
+  // Categories
+  if (_categories.length === 0) {
+    const res = await api('getCategories', { token: s.token });
+    if (res.ok) _categories = res.categories;
+  }
+  const catSel = document.getElementById('fa-category');
+  catSel.innerHTML = '<option value="">Select category…</option>';
+  _categories.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.code;
+    opt.textContent = c.name;
+    catSel.appendChild(opt);
+  });
+}
+
+function onCategoryChange() {
+  const code = document.getElementById('fa-category').value;
+  const cat = _categories.find(c => c.code === code);
+  if (!cat) return;
+  const svc = cat.default_serviceable === true || cat.default_serviceable === 'TRUE';
+  document.getElementById('fa-serviceable').checked = svc;
+  onServiceableChange();
+}
+
+function onServiceableChange() {
+  const on = document.getElementById('fa-serviceable').checked;
+  document.getElementById('fa-service-fields').style.display = on ? 'block' : 'none';
+}
+
+function setFaFeedback(text, kind) {
+  const el = document.getElementById('fa-feedback');
+  el.textContent = text;
+  el.className = 'feedback ' + (kind || 'muted');
+}
+
+async function submitAddAsset() {
+  const s = getSession();
+  if (!s) return;
+
+  const outlet   = document.getElementById('fa-outlet').value;
+  const category = document.getElementById('fa-category').value;
+  const name     = document.getElementById('fa-name').value.trim();
+
+  if (!outlet)   { setFaFeedback('Select an outlet', 'err'); return; }
+  if (!category) { setFaFeedback('Select a category', 'err'); return; }
+  if (!name)     { setFaFeedback('Asset name required', 'err'); return; }
+
+  const serviceable = document.getElementById('fa-serviceable').checked;
+
+  const payload = {
+    outlet, category, name,
+    purchase_date:            document.getElementById('fa-purchase-date').value || '',
+    vendor_purchased:         document.getElementById('fa-vendor').value.trim(),
+    warranty_until:           document.getElementById('fa-warranty').value || '',
+    serviceable,
+    service_type:             serviceable ? document.getElementById('fa-service-type').value : '',
+    service_frequency_months: serviceable ? (Number(document.getElementById('fa-service-freq').value) || '') : '',
+    location: document.getElementById('fa-location').value.trim(),
+    status:   document.getElementById('fa-status').value,
+    notes:    document.getElementById('fa-notes').value.trim()
+  };
+
+  if (s.user.role === 'Owner') {
+    const v = document.getElementById('fa-purchase-value').value;
+    payload.purchase_value = v !== '' ? Number(v) : '';
+  }
+
+  const btn = document.getElementById('fa-submit');
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  setFaFeedback('', 'muted');
+
+  const res = await api('addAsset', { token: s.token, payload });
+
+  btn.disabled = false;
+  btn.textContent = 'Add Asset';
+
+  if (!res.ok) {
+    setFaFeedback(res.error || 'Failed to add asset', 'err');
+    return;
+  }
+
+  setFaFeedback('Added · ' + res.code, 'ok');
+  resetAddAssetForm();
+}
+
+function resetAddAssetForm() {
+  ['fa-name','fa-purchase-date','fa-purchase-value',
+   'fa-vendor','fa-warranty','fa-location','fa-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('fa-outlet').value = '';
+  document.getElementById('fa-category').value = '';
+  document.getElementById('fa-status').value = 'active';
+  document.getElementById('fa-serviceable').checked = false;
+  document.getElementById('fa-service-fields').style.display = 'none';
+}
 </script>
 </body>
 </html>

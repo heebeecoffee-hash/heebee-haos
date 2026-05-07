@@ -18,7 +18,7 @@
 // 9. Open index.html in browser → log in
 // =====================================================================
 
-const APP_VERSION = 'haos-v1.0-phase1';
+const APP_VERSION = 'haos-v1.0-phase2';
 const SHEET_NAME = 'HAOS Master';
 const SESSION_HOURS = 2;
 
@@ -176,6 +176,10 @@ function doPost(e) {
       case 'pingPresence':   result = pingPresence(data.token); break;
       case 'getAppMeta':     result = getAppMeta(data.token); break;
       case 'logout':         result = logout(data.token); break;
+      case 'addAsset':       result = addAsset(data.token, data.payload); break;
+      case 'listAssets':     result = listAssets(data.token, data.filters); break;
+      case 'getAsset':       result = getAsset(data.token, data.code); break;
+      case 'updateAsset':    result = updateAsset(data.token, data.code, data.payload); break;
       default:               result = { ok: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {
@@ -219,7 +223,7 @@ function validatePin(email, pin) {
       return {
         ok: true,
         token: token,
-        user: { email: email, name: row[c.name], role: row[c.role] }
+        user: { email: email, name: row[c.name], role: normalizeRole(row[c.role]) }
       };
     }
   }
@@ -266,7 +270,7 @@ function getCurrentUser(token) {
         && row[c.active] === true) {
       return {
         ok: true,
-        user: { email: decoded.email, name: row[c.name], role: row[c.role] }
+        user: { email: decoded.email, name: row[c.name], role: normalizeRole(row[c.role]) }
       };
     }
   }
@@ -351,4 +355,262 @@ function writeAudit(user, action, sheet, recordId, before, after) {
   } catch (e) {
     Logger.log('Audit failed: ' + e.toString());
   }
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+
+// Converts any value Google Sheets might give us for a date to yyyy-MM-dd.
+// Sheets stores dates as Date objects; cells typed as text come as strings.
+function normalizeDateStr(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+  const s = String(val).trim();
+  // Already yyyy-MM-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // Try parsing
+  const dt = new Date(s);
+  if (!isNaN(dt)) {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+  return s;
+}
+
+// Returns next available code like HB-GHB-AC-03.
+// Scans Assets sheet for existing codes matching the outlet+category prefix.
+function nextAssetCode(outlet, category) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Assets');
+  const data = sheet.getDataRange().getValues();
+  const prefix = 'HB-' + outlet + '-' + category + '-';
+  let max = 0;
+  for (let i = 1; i < data.length; i++) {
+    const code = String(data[i][0] || '');
+    if (code.startsWith(prefix)) {
+      const num = parseInt(code.slice(prefix.length), 10);
+      if (!isNaN(num) && num > max) max = num;
+    }
+  }
+  return prefix + String(max + 1).padStart(2, '0');
+}
+
+// Returns value from Config sheet for a given key.
+function getConfigValue(key) {
+  const data = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName('Config').getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === key) return String(data[i][1]).trim();
+  }
+  return '';
+}
+
+// Returns existing child folder by name, or creates it.
+function getOrCreateFolder(parentFolder, name) {
+  const it = parentFolder.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parentFolder.createFolder(name);
+}
+
+// Reads a sheet into an array of objects keyed by header row.
+function sheetToObjects(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const data = ss.getSheetByName(sheetName).getDataRange().getValues();
+  if (data.length < 2) return [];
+  const h = data[0];
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    const obj = {};
+    h.forEach((k, j) => { obj[k] = data[i][j]; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+// Strips fields the Manager role must not see.
+function stripForRole(asset, role) {
+  if (role !== 'Owner') {
+    delete asset.purchase_value;
+  }
+  return asset;
+}
+
+// =====================================================================
+// ASSET CRUD
+// =====================================================================
+
+function addAsset(token, payload) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (!payload) return { ok: false, error: 'Payload required' };
+
+  const outlet   = String(payload.outlet   || '').trim().toUpperCase();
+  const category = String(payload.category || '').trim().toUpperCase();
+  const name     = String(payload.name     || '').trim();
+
+  if (!outlet)   return { ok: false, error: 'Outlet required' };
+  if (!category) return { ok: false, error: 'Category required' };
+  if (!name)     return { ok: false, error: 'Asset name required' };
+
+  const code = nextAssetCode(outlet, category);
+  const now  = new Date().toISOString();
+
+  // Build the row matching SHEETS.Assets column order exactly.
+  const row = [
+    code,
+    outlet,
+    category,
+    name,
+    normalizeDateStr(payload.purchase_date),
+    payload.purchase_value !== undefined ? payload.purchase_value : '',
+    String(payload.vendor_purchased || '').trim(),
+    normalizeDateStr(payload.warranty_until),
+    payload.serviceable === true || payload.serviceable === 'true' ? true : false,
+    String(payload.service_type || '').trim(),
+    payload.service_frequency_months !== undefined ? Number(payload.service_frequency_months) || '' : '',
+    '',                                          // last_service_date — empty on creation
+    String(payload.location || '').trim(),
+    String(payload.status   || 'active').trim(),
+    String(payload.notes    || '').trim(),
+    '',                                          // drive_folder_id — set below
+    0,                                           // photo_count
+    auth.user.email,
+    now
+  ];
+
+  // Create Drive folder: HAOS_Assets/{outlet}/{code}/
+  let driveFolderId = '';
+  try {
+    const rootId = getConfigValue('drive_root_folder_id');
+    if (!rootId) throw new Error('drive_root_folder_id is empty in Config');
+    const root      = DriveApp.getFolderById(rootId);
+    const outletDir = getOrCreateFolder(root, outlet);
+    const assetDir  = getOrCreateFolder(outletDir, code);
+    driveFolderId   = assetDir.getId();
+  } catch (e) {
+    Logger.log('Drive folder creation failed: ' + e.toString());
+  }
+
+  // Slot drive_folder_id into the row (index 15, 0-based).
+  row[15] = driveFolderId;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.getSheetByName('Assets').appendRow(row);
+
+  writeAudit(auth.user.email, 'addAsset', 'Assets', code, {}, payload);
+
+  return { ok: true, code: code, drive_folder_id: driveFolderId };
+}
+
+function listAssets(token, filters) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+
+  const rows = sheetToObjects('Assets');
+  const f = filters || {};
+
+  const filtered = rows.filter(a => {
+    if (f.outlet   && a.outlet   !== f.outlet)   return false;
+    if (f.category && a.category !== f.category) return false;
+    if (f.status   && a.status   !== f.status)   return false;
+    return true;
+  });
+
+  const assets = filtered.map(a => {
+    // Normalize date fields so frontend always gets strings, not Date objects.
+    a.purchase_date   = normalizeDateStr(a.purchase_date);
+    a.warranty_until  = normalizeDateStr(a.warranty_until);
+    a.last_service_date = normalizeDateStr(a.last_service_date);
+    a.created_at      = normalizeDateStr(a.created_at);
+    return stripForRole(a, normalizeRole(auth.user.role));
+  });
+
+  return { ok: true, assets: assets };
+}
+
+function getAsset(token, code) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (!code) return { ok: false, error: 'Code required' };
+
+  const rows = sheetToObjects('Assets');
+  const asset = rows.find(a => String(a.code).trim() === String(code).trim());
+  if (!asset) return { ok: false, error: 'Asset not found: ' + code };
+
+  asset.purchase_date     = normalizeDateStr(asset.purchase_date);
+  asset.warranty_until    = normalizeDateStr(asset.warranty_until);
+  asset.last_service_date = normalizeDateStr(asset.last_service_date);
+  asset.created_at        = normalizeDateStr(asset.created_at);
+
+  return { ok: true, asset: stripForRole(asset, normalizeRole(auth.user.role)) };
+}
+
+function updateAsset(token, code, payload) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (!code)    return { ok: false, error: 'Code required' };
+  if (!payload) return { ok: false, error: 'Payload required' };
+
+  // Manager cannot update purchase_value.
+  if (normalizeRole(auth.user.role) !== 'Owner') {
+    delete payload.purchase_value;
+  }
+
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Assets');
+  const data  = sheet.getDataRange().getValues();
+  const h     = data[0];
+  const codeIdx = h.indexOf('code');
+
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][codeIdx]).trim() === String(code).trim()) {
+      rowIdx = i + 1; // 1-based sheet row
+      break;
+    }
+  }
+  if (rowIdx === -1) return { ok: false, error: 'Asset not found: ' + code };
+
+  // Snapshot before state for audit.
+  const before = {};
+  h.forEach((k, j) => { before[k] = data[rowIdx - 1][j]; });
+
+  // Allowed editable fields (code, created_by, created_at, drive_folder_id, photo_count not editable via UI).
+  const editable = [
+    'name', 'purchase_date', 'purchase_value', 'vendor_purchased',
+    'warranty_until', 'serviceable', 'service_type', 'service_frequency_months',
+    'location', 'status', 'notes'
+  ];
+
+  editable.forEach(field => {
+    if (payload[field] === undefined) return;
+    const colIdx = h.indexOf(field);
+    if (colIdx === -1) return;
+    let val = payload[field];
+    if (field === 'purchase_date' || field === 'warranty_until') val = normalizeDateStr(val);
+    if (field === 'serviceable') val = (val === true || val === 'true');
+    if (field === 'service_frequency_months') val = Number(val) || '';
+    sheet.getRange(rowIdx, colIdx + 1).setValue(val);
+  });
+
+  writeAudit(auth.user.email, 'updateAsset', 'Assets', code, before, payload);
+
+  return { ok: true, code: code };
+}
+
+// =====================================================================
+// ROLE HELPER (also used by asset functions above)
+// =====================================================================
+
+function normalizeRole(r) {
+  if (!r) return '';
+  const s = String(r).trim().toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
