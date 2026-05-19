@@ -1991,7 +1991,10 @@ function renderRepairDetail(r, role) {
 
   // Action area — Owner only, for actionable statuses
   const nextStatus = REPAIR_NEXT_STATUS[r.status];
-  if (role === 'Owner' && nextStatus && !isRejected) {
+  // Manager can advance all states except Verified (Owner signs off)
+  const canAdvance = nextStatus && !isRejected &&
+    (role === 'Owner' || nextStatus !== 'Verified');
+  if (canAdvance) {
     const needsCost = r.status === 'In Progress'; // entering cost when marking Completed
     html +=
       '<div class="glass rd-action-area" style="margin-bottom:10px;padding-top:18px;">' +
