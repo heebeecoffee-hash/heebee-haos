@@ -1782,11 +1782,16 @@ async function routeToRole(user) {
 // =====================================================================
 // LOGOUT
 // =====================================================================
-async function logout() {
+function logout() {
   const s = getSession();
-  if (s && s.token) await api('logout', { token: s.token });
+  // Fire logout to backend without awaiting — local session clears instantly
+  if (s && s.token) api('logout', { token: s.token });
   clearSession();
   stopHeartbeat();
+  // Reset globals so next login starts fresh
+  _outlets = []; _categories = []; _allAssets = [];
+  _dashMeta = null; _pendingCount = 0; _pendingApprovals = [];
+  _currentAsset = null; _currentRepair = null;
   goBackToEmail();
   showPanel('panel-login');
   setFeedback('Logged out', 'muted');
@@ -1904,6 +1909,18 @@ function approvalCardHTML(r, idx) {
     '</div>' +
     '</div>'
   );
+}
+
+function parseRepairNotes(str) {
+  if (!str) return [];
+  return String(str).split('\n')
+    .map(l => l.trim()).filter(Boolean)
+    .map(line => {
+      const m = line.match(/^\[(.+?) · (.+?)\]: (.+)$/);
+      return m
+        ? { stage: m[1], date: m[2], text: m[3] }
+        : { stage: '', date: '', text: line };
+    });
 }
 
 function escHtml(s) {
@@ -2099,6 +2116,31 @@ function renderRepairDetail(r, role) {
 
   html += '</div></div>'; // close timeline + glass
 
+  // Communication log — all notes across every stage, in order
+  const noteEntries = parseRepairNotes(r.notes);
+  if (noteEntries.length > 0) {
+    html += '<div class="glass" style="margin-bottom:10px;overflow:hidden;">' +
+      '<div style="padding:14px 18px 4px;">' +
+        '<div style="font-family:\'Space Mono\',monospace;font-size:0.5rem;letter-spacing:3px;' +
+             'text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Communication</div>' +
+        noteEntries.map(e =>
+          '<div style="padding:10px 0;border-bottom:1px solid var(--border2);">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+              (e.stage
+                ? '<span style="font-family:\'Space Mono\',monospace;font-size:0.45rem;' +
+                  'letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);">' + escHtml(e.stage) + '</span>'
+                : '<span></span>') +
+              (e.date
+                ? '<span style="font-family:\'Space Mono\',monospace;font-size:0.42rem;color:var(--text3);">' + escHtml(e.date) + '</span>'
+                : '') +
+            '</div>' +
+            '<div style="font-size:0.85rem;color:var(--text2);line-height:1.5;">' + escHtml(e.text) + '</div>' +
+          '</div>'
+        ).join('') +
+      '</div>' +
+    '</div>';
+  }
+
   // Action area — Owner only, for actionable statuses
   const nextStatus = REPAIR_NEXT_STATUS[r.status];
   // Manager can advance all states except Verified (Owner signs off)
@@ -2223,11 +2265,16 @@ async function init() {
 
   const s = getSession();
   if (s && isSessionFresh(s)) {
+    // Show preloader immediately — covers login panel so user never sees the flash
+    showPreloader(4, 'Resuming');
+    await new Promise(r => requestAnimationFrame(r));
+
     const r = await api('getCurrentUser', { token: s.token });
     if (r.ok) {
-      await routeToRole(r.user);
+      await routeToRole(r.user); // routeToRole → preloadAppData manages the rest
       return;
     }
+    hidePreloader();
   }
   clearSession();
   showPanel('panel-login');

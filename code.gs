@@ -758,10 +758,16 @@ function reportRepair(token, payload) {
   // owner_approved_date | owner_approved_by | vendor_id |
   // vendor_assigned_date | started_date | completed_date |
   // verified_date | cost | notes
+  // Format initial notes with stage label for consistent communication log
+  const initNotes = (function() {
+    const n = String(payload.notes || '').trim();
+    return n ? '[Reported · ' + date + ']: ' + n : '';
+  })();
+
   ss.getSheetByName('Repair_Journal').appendRow([
     id, assetCode, date, auth.user.email, issue, estimatedCost, 'Reported',
     '', '', '', '', '', '', '', 0,
-    String(payload.notes || '').trim()
+    initNotes
   ]);
 
   // Approvals row
@@ -893,11 +899,21 @@ function _advanceRepair(auth, repairId, newStatus, extra) {
   // Patch status
   sheet.getRange(rowIdx, h.indexOf('status') + 1).setValue(newStatus);
 
-  // Patch extra fields
+  // Patch extra fields — notes are appended (not overwritten) to preserve history
   Object.keys(extra).forEach(field => {
+    if (field === 'notes') return; // handled separately below
     const col = h.indexOf(field);
     if (col !== -1) sheet.getRange(rowIdx, col + 1).setValue(extra[field]);
   });
+
+  // Append notes with stage + date label so history is preserved across steps
+  const notesCol = h.indexOf('notes');
+  if (notesCol !== -1 && extra.notes && String(extra.notes).trim()) {
+    const existing  = String(data[rowIdx - 1][notesCol] || '').trim();
+    const dateStr   = normalizeDateStr(new Date());
+    const newEntry  = '[' + newStatus + ' · ' + dateStr + ']: ' + String(extra.notes).trim();
+    sheet.getRange(rowIdx, notesCol + 1).setValue(existing ? existing + '\n' + newEntry : newEntry);
+  }
 
   // Update Approvals row status
   if (newStatus === 'Owner Approved' || newStatus === 'Rejected') {
