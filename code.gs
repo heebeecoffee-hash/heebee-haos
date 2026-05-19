@@ -18,7 +18,7 @@
 // 9. Open index.html in browser → log in
 // =====================================================================
 
-const APP_VERSION = 'haos-v1.0-phase2';
+const APP_VERSION = 'haos-v1.0-phase3';
 const SHEET_NAME = 'HAOS Master';
 const SESSION_HOURS = 2;
 
@@ -180,6 +180,15 @@ function doPost(e) {
       case 'listAssets':     result = listAssets(data.token, data.filters); break;
       case 'getAsset':       result = getAsset(data.token, data.code); break;
       case 'updateAsset':    result = updateAsset(data.token, data.code, data.payload); break;
+      case 'addServiceEntry':   result = addServiceEntry(data.token, data.payload); break;
+      case 'listServiceLog':    result = listServiceLog(data.token, data.assetCode); break;
+      case 'reportRepair':      result = reportRepair(data.token, data.payload); break;
+      case 'listRepairs':       result = listRepairs(data.token, data.filters); break;
+      case 'getRepair':         result = getRepair(data.token, data.repairId); break;
+      case 'approveRepair':     result = approveRepair(data.token, data.repairId, data.notes); break;
+      case 'rejectRepair':      result = rejectRepair(data.token, data.repairId, data.notes); break;
+      case 'updateRepairStatus': result = updateRepairStatus(data.token, data.repairId, data.status, data.cost, data.notes); break;
+      case 'listApprovals':     result = listApprovals(data.token); break;
       default:               result = { ok: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {
@@ -613,4 +622,294 @@ function normalizeRole(r) {
   if (!r) return '';
   const s = String(r).trim().toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// =====================================================================
+// ID GENERATORS
+// =====================================================================
+
+function generateId(prefix) {
+  const now = new Date();
+  const stamp = now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0');
+  const rand = Math.random().toString(36).substr(2, 5).toUpperCase();
+  return prefix + '-' + stamp + '-' + rand;
+}
+
+// =====================================================================
+// SERVICE LOG
+// =====================================================================
+
+function addServiceEntry(token, payload) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (!payload) return { ok: false, error: 'Payload required' };
+
+  const assetCode = String(payload.asset_code || '').trim();
+  if (!assetCode) return { ok: false, error: 'asset_code required' };
+
+  // Verify asset exists
+  const assets = sheetToObjects('Assets');
+  const asset = assets.find(a => String(a.code).trim() === assetCode);
+  if (!asset) return { ok: false, error: 'Asset not found: ' + assetCode };
+
+  const id          = generateId('SVC');
+  const serviceDate = normalizeDateStr(payload.service_date || new Date());
+  const now         = new Date().toISOString();
+
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const log   = ss.getSheetByName('Service_Log');
+  log.appendRow([
+    id,
+    assetCode,
+    serviceDate,
+    String(payload.vendor_name || '').trim(),   // vendor free-text in Phase 3
+    payload.cost !== undefined ? Number(payload.cost) || 0 : 0,
+    String(payload.notes || '').trim(),
+    auth.user.email,
+    0   // photos_added
+  ]);
+
+  // Update last_service_date on the Asset row
+  const assetSheet = ss.getSheetByName('Assets');
+  const assetData  = assetSheet.getDataRange().getValues();
+  const h          = assetData[0];
+  const codeIdx    = h.indexOf('code');
+  const lsdIdx     = h.indexOf('last_service_date');
+  for (let i = 1; i < assetData.length; i++) {
+    if (String(assetData[i][codeIdx]).trim() === assetCode) {
+      assetSheet.getRange(i + 1, lsdIdx + 1).setValue(serviceDate);
+      break;
+    }
+  }
+
+  writeAudit(auth.user.email, 'addServiceEntry', 'Service_Log', id, {}, payload);
+  return { ok: true, id: id, service_date: serviceDate };
+}
+
+function listServiceLog(token, assetCode) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (!assetCode) return { ok: false, error: 'assetCode required' };
+
+  const rows = sheetToObjects('Service_Log');
+  const entries = rows
+    .filter(r => String(r.asset_code).trim() === String(assetCode).trim())
+    .map(r => {
+      r.service_date = normalizeDateStr(r.service_date);
+      return r;
+    })
+    .sort((a, b) => (b.service_date > a.service_date ? 1 : -1));
+
+  return { ok: true, entries: entries };
+}
+
+// =====================================================================
+// REPAIR JOURNAL
+// =====================================================================
+
+function reportRepair(token, payload) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (!payload) return { ok: false, error: 'Payload required' };
+
+  const assetCode = String(payload.asset_code || '').trim();
+  const issue     = String(payload.issue     || '').trim();
+  if (!assetCode) return { ok: false, error: 'asset_code required' };
+  if (!issue)     return { ok: false, error: 'issue description required' };
+
+  const id   = generateId('REP');
+  const now  = new Date().toISOString();
+  const date = normalizeDateStr(new Date());
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Repair_Journal row
+  // id | asset_code | reported_date | reported_by | issue | status |
+  // owner_approved_date | owner_approved_by | vendor_id |
+  // vendor_assigned_date | started_date | completed_date |
+  // verified_date | cost | notes
+  ss.getSheetByName('Repair_Journal').appendRow([
+    id, assetCode, date, auth.user.email, issue, 'Reported',
+    '', '', '', '', '', '', '', 0,
+    String(payload.notes || '').trim()
+  ]);
+
+  // Approvals row
+  // id | type | related_id | requested_by | requested_date |
+  // approved_by | approved_date | status | notes
+  ss.getSheetByName('Approvals').appendRow([
+    generateId('APR'), 'repair', id, auth.user.email, date,
+    '', '', 'Pending', String(payload.notes || '').trim()
+  ]);
+
+  writeAudit(auth.user.email, 'reportRepair', 'Repair_Journal', id, {}, payload);
+  return { ok: true, repairId: id };
+}
+
+function listRepairs(token, filters) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+
+  const f    = filters || {};
+  const rows = sheetToObjects('Repair_Journal');
+  const list = rows.filter(r => {
+    if (f.asset_code && String(r.asset_code).trim() !== f.asset_code) return false;
+    if (f.status     && String(r.status).trim()     !== f.status)     return false;
+    // Manager only sees repairs they reported
+    if (normalizeRole(auth.user.role) !== 'Owner' &&
+        String(r.reported_by).trim() !== auth.user.email) return false;
+    return true;
+  }).map(r => {
+    r.reported_date       = normalizeDateStr(r.reported_date);
+    r.owner_approved_date = normalizeDateStr(r.owner_approved_date);
+    r.vendor_assigned_date= normalizeDateStr(r.vendor_assigned_date);
+    r.started_date        = normalizeDateStr(r.started_date);
+    r.completed_date      = normalizeDateStr(r.completed_date);
+    r.verified_date       = normalizeDateStr(r.verified_date);
+    return r;
+  });
+
+  return { ok: true, repairs: list };
+}
+
+function getRepair(token, repairId) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (!repairId) return { ok: false, error: 'repairId required' };
+
+  const rows   = sheetToObjects('Repair_Journal');
+  const repair = rows.find(r => String(r.id).trim() === String(repairId).trim());
+  if (!repair) return { ok: false, error: 'Repair not found: ' + repairId };
+
+  // Manager can only see repairs they reported
+  if (normalizeRole(auth.user.role) !== 'Owner' &&
+      String(repair.reported_by).trim() !== auth.user.email) {
+    return { ok: false, error: 'Access denied' };
+  }
+
+  repair.reported_date        = normalizeDateStr(repair.reported_date);
+  repair.owner_approved_date  = normalizeDateStr(repair.owner_approved_date);
+  repair.vendor_assigned_date = normalizeDateStr(repair.vendor_assigned_date);
+  repair.started_date         = normalizeDateStr(repair.started_date);
+  repair.completed_date       = normalizeDateStr(repair.completed_date);
+  repair.verified_date        = normalizeDateStr(repair.verified_date);
+
+  return { ok: true, repair: repair };
+}
+
+function approveRepair(token, repairId, notes) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (normalizeRole(auth.user.role) !== 'Owner') return { ok: false, error: 'Owner only' };
+  return _advanceRepair(auth, repairId, 'Owner Approved', {
+    owner_approved_date: normalizeDateStr(new Date()),
+    owner_approved_by:   auth.user.email,
+    notes: notes || ''
+  });
+}
+
+function rejectRepair(token, repairId, notes) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (normalizeRole(auth.user.role) !== 'Owner') return { ok: false, error: 'Owner only' };
+  return _advanceRepair(auth, repairId, 'Rejected', { notes: notes || '' });
+}
+
+function updateRepairStatus(token, repairId, status, cost, notes) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+
+  const allowed = ['Vendor Assigned', 'In Progress', 'Completed', 'Verified'];
+  if (!allowed.includes(status)) return { ok: false, error: 'Invalid status: ' + status };
+
+  // Only Owner can Verify
+  if (status === 'Verified' && normalizeRole(auth.user.role) !== 'Owner') {
+    return { ok: false, error: 'Owner only can verify' };
+  }
+
+  const dateFields = {
+    'Vendor Assigned': 'vendor_assigned_date',
+    'In Progress':     'started_date',
+    'Completed':       'completed_date',
+    'Verified':        'verified_date'
+  };
+  const extra = { notes: notes || '' };
+  if (cost !== undefined && cost !== '') extra.cost = Number(cost) || 0;
+  if (dateFields[status]) extra[dateFields[status]] = normalizeDateStr(new Date());
+
+  return _advanceRepair(auth, repairId, status, extra);
+}
+
+// Internal: patches Repair_Journal row + updates Approvals if needed
+function _advanceRepair(auth, repairId, newStatus, extra) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Repair_Journal');
+  const data  = sheet.getDataRange().getValues();
+  const h     = data[0];
+  const idIdx = h.indexOf('id');
+
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx]).trim() === String(repairId).trim()) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+  if (rowIdx === -1) return { ok: false, error: 'Repair not found: ' + repairId };
+
+  const before = {};
+  h.forEach((k, j) => { before[k] = data[rowIdx - 1][j]; });
+
+  // Patch status
+  sheet.getRange(rowIdx, h.indexOf('status') + 1).setValue(newStatus);
+
+  // Patch extra fields
+  Object.keys(extra).forEach(field => {
+    const col = h.indexOf(field);
+    if (col !== -1) sheet.getRange(rowIdx, col + 1).setValue(extra[field]);
+  });
+
+  // Update Approvals row status
+  if (newStatus === 'Owner Approved' || newStatus === 'Rejected') {
+    const appSheet = ss.getSheetByName('Approvals');
+    const appData  = appSheet.getDataRange().getValues();
+    const ah       = appData[0];
+    const riIdx    = ah.indexOf('related_id');
+    const stIdx    = ah.indexOf('status');
+    const abIdx    = ah.indexOf('approved_by');
+    const adIdx    = ah.indexOf('approved_date');
+    for (let i = 1; i < appData.length; i++) {
+      if (String(appData[i][riIdx]).trim() === String(repairId).trim()) {
+        appSheet.getRange(i + 1, stIdx + 1).setValue(
+          newStatus === 'Owner Approved' ? 'Approved' : 'Rejected'
+        );
+        appSheet.getRange(i + 1, abIdx + 1).setValue(auth.user.email);
+        appSheet.getRange(i + 1, adIdx + 1).setValue(normalizeDateStr(new Date()));
+        break;
+      }
+    }
+  }
+
+  writeAudit(auth.user.email, 'repairStatus:' + newStatus, 'Repair_Journal', repairId, before, extra);
+  return { ok: true, repairId: repairId, status: newStatus };
+}
+
+// Owner approval queue — pending repairs only
+function listApprovals(token) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+  if (normalizeRole(auth.user.role) !== 'Owner') return { ok: false, error: 'Owner only' };
+
+  const rows = sheetToObjects('Repair_Journal');
+  const pending = rows
+    .filter(r => String(r.status).trim() === 'Reported')
+    .map(r => {
+      r.reported_date = normalizeDateStr(r.reported_date);
+      return r;
+    })
+    .sort((a, b) => (a.reported_date > b.reported_date ? 1 : -1));
+
+  return { ok: true, pending: pending, count: pending.length };
 }

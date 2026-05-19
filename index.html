@@ -651,6 +651,95 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
 }
 
 /* =====================================================================
+   SMALL BUTTON
+   ===================================================================== */
+.btn-sm {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  padding: 7px 14px;
+  border-radius: 99px;
+  border: 1px solid var(--input-bdr);
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-sm:hover { border-color: var(--gold); color: var(--gold); }
+.btn-sm.primary { background: var(--btn-bg); color: var(--btn-fg); border-color: transparent; }
+
+/* =====================================================================
+   DETAIL SECTIONS (service + repairs)
+   ===================================================================== */
+.detail-section { margin-top: 10px; }
+.detail-section-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border2);
+}
+.detail-section-title {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.next-due-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border2);
+}
+.next-due-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.next-due-val {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text);
+}
+.next-due-val.overdue { color: var(--danger); }
+.next-due-val.soon    { color: var(--warning); }
+.svc-entry {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border2);
+}
+.svc-entry:last-child { border-bottom: none; }
+.svc-entry-top { display: flex; justify-content: space-between; margin-bottom: 3px; }
+.svc-date { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--gold); letter-spacing: 1px; }
+.svc-cost { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--text3); }
+.svc-vendor { font-size: 0.85rem; color: var(--text); margin-bottom: 2px; }
+.svc-notes  { font-size: 0.78rem; color: var(--text3); }
+.rep-entry {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border2);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.rep-entry:last-child { border-bottom: none; }
+.rep-entry:hover { background: var(--surface2); }
+.rep-entry-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.rep-id { font-family: 'Space Mono', monospace; font-size: 0.52rem; color: var(--text3); letter-spacing: 1px; }
+.rep-status-badge {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.45rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 99px;
+}
+.rep-issue { font-size: 0.85rem; color: var(--text); margin-bottom: 3px; }
+.rep-date  { font-family: 'Space Mono', monospace; font-size: 0.5rem; color: var(--text3); }
+
+/* =====================================================================
    ASSET LIST
    ===================================================================== */
 .filter-row {
@@ -1062,6 +1151,60 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
     <div class="feedback muted" id="fa-feedback" style="margin-bottom:40px;"></div>
   </section>
 
+  <!-- ============== LOG SERVICE ============== -->
+  <section class="panel" id="panel-log-service">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="showPanel('panel-asset-detail')">‹</button>
+      <h2 class="panel-title">Log Service</h2>
+    </div>
+    <div class="glass form-card">
+      <div class="asset-code" id="ls-asset-code" style="margin-bottom:16px;color:var(--gold);font-family:'Space Mono',monospace;font-size:0.7rem;letter-spacing:2px;"></div>
+      <div class="field">
+        <label class="label">Service Date</label>
+        <input type="date" class="input" id="ls-date">
+      </div>
+      <div class="field">
+        <label class="label">Vendor / Technician</label>
+        <input type="text" class="input" id="ls-vendor" placeholder="Name or company">
+      </div>
+      <div class="field">
+        <label class="label">Cost ₹</label>
+        <input type="number" class="input" id="ls-cost" placeholder="0">
+      </div>
+      <div class="field">
+        <label class="label">Notes</label>
+        <textarea class="input" id="ls-notes" placeholder="What was done…"></textarea>
+      </div>
+    </div>
+    <button class="btn" id="ls-submit" onclick="submitLogService()" style="margin-top:16px;">Log Service</button>
+    <div class="feedback muted" id="ls-feedback" style="margin-bottom:40px;"></div>
+  </section>
+
+  <!-- ============== REPORT ISSUE ============== -->
+  <section class="panel" id="panel-report-issue">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="showPanel('panel-asset-detail')">‹</button>
+      <h2 class="panel-title">Report Issue</h2>
+    </div>
+    <div class="glass form-card">
+      <div class="asset-code" id="ri-asset-code" style="margin-bottom:16px;color:var(--gold);font-family:'Space Mono',monospace;font-size:0.7rem;letter-spacing:2px;"></div>
+      <div class="field">
+        <label class="label">Issue Description</label>
+        <textarea class="input" id="ri-issue" style="min-height:100px;" placeholder="Describe the problem clearly…"></textarea>
+      </div>
+      <div class="field">
+        <label class="label">Notes</label>
+        <textarea class="input" id="ri-notes" placeholder="Any additional context…"></textarea>
+      </div>
+      <div style="padding:14px 0 4px;">
+        <div class="label" style="margin-bottom:4px;">What happens next</div>
+        <div style="font-size:0.85rem;color:var(--text2);line-height:1.5;">Request goes to Owner for approval before any vendor is called.</div>
+      </div>
+    </div>
+    <button class="btn" id="ri-submit" onclick="submitReportIssue()" style="margin-top:16px;">Send for Approval</button>
+    <div class="feedback muted" id="ri-feedback" style="margin-bottom:40px;"></div>
+  </section>
+
   <!-- ============== ASSET DETAIL ============== -->
   <section class="panel" id="panel-asset-detail">
     <div class="panel-hdr">
@@ -1077,6 +1220,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
         <div id="detail-status-pill"></div>
       </div>
       <div class="glass status-card" id="detail-fields"></div>
+      <div id="detail-service-section"></div>
+      <div id="detail-repairs-section"></div>
       <div class="glass empty-state" style="margin-top:10px;padding:28px;">
         <div class="empty-icon">◇</div>
         <div class="empty-text">Photos · Phase 2.5</div>
@@ -1590,6 +1735,215 @@ function assetCardHTML(a) {
 }
 
 // =====================================================================
+// SERVICE + REPAIR HELPERS
+// =====================================================================
+const REPAIR_STATUS_STYLE = {
+  'Reported':        { bg: 'rgba(255,149,0,0.12)',  color: 'var(--warning)' },
+  'Owner Approved':  { bg: 'rgba(52,199,89,0.12)',  color: 'var(--success)' },
+  'Vendor Assigned': { bg: 'rgba(10,132,255,0.12)', color: '#0a84ff' },
+  'In Progress':     { bg: 'rgba(10,132,255,0.12)', color: '#0a84ff' },
+  'Completed':       { bg: 'rgba(52,199,89,0.12)',  color: 'var(--success)' },
+  'Verified':        { bg: 'rgba(52,199,89,0.18)',  color: 'var(--success)' },
+  'Rejected':        { bg: 'rgba(255,59,48,0.12)',  color: 'var(--danger)' }
+};
+
+function calcNextServiceDate(lastDate, freqMonths) {
+  if (!lastDate || !freqMonths) return null;
+  const d = new Date(lastDate + 'T00:00:00');
+  d.setMonth(d.getMonth() + Number(freqMonths));
+  return d.toISOString().slice(0, 10);
+}
+
+function dueDateClass(dateStr) {
+  if (!dateStr) return '';
+  const today = new Date().toISOString().slice(0, 10);
+  const soon  = new Date();
+  soon.setDate(soon.getDate() + 30);
+  const soonStr = soon.toISOString().slice(0, 10);
+  if (dateStr < today)   return 'overdue';
+  if (dateStr < soonStr) return 'soon';
+  return '';
+}
+
+function renderServiceSection(asset, entries) {
+  const el = document.getElementById('detail-service-section');
+  if (!asset.serviceable) { el.innerHTML = ''; return; }
+
+  const nextDue  = calcNextServiceDate(asset.last_service_date, asset.service_frequency_months);
+  const dueClass = dueDateClass(nextDue);
+  const dueLabel = nextDue
+    ? (dueClass === 'overdue' ? nextDue + ' · OVERDUE' : dueClass === 'soon' ? nextDue + ' · DUE SOON' : nextDue)
+    : '—';
+
+  let html =
+    '<div class="glass detail-section">' +
+    '<div class="detail-section-hdr">' +
+      '<span class="detail-section-title">Service</span>' +
+      '<button class="btn-sm primary" onclick="openLogService()">+ Log</button>' +
+    '</div>' +
+    '<div class="next-due-row">' +
+      '<span class="next-due-label">Next due</span>' +
+      '<span class="next-due-val ' + dueClass + '">' + dueLabel + '</span>' +
+    '</div>' +
+    '<div class="next-due-row" style="border-bottom:none;">' +
+      '<span class="next-due-label">Last service</span>' +
+      '<span class="next-due-val">' + (asset.last_service_date || '—') + '</span>' +
+    '</div>';
+
+  if (entries && entries.length > 0) {
+    html += '<div style="border-top:1px solid var(--border2);">';
+    entries.slice(0, 5).forEach(e => {
+      html += '<div class="svc-entry">' +
+        '<div class="svc-entry-top">' +
+          '<span class="svc-date">' + e.service_date + '</span>' +
+          '<span class="svc-cost">' + (e.cost ? '₹' + Number(e.cost).toLocaleString('en-IN') : '') + '</span>' +
+        '</div>' +
+        '<div class="svc-vendor">' + (e.vendor_id || '—') + '</div>' +
+        (e.notes ? '<div class="svc-notes">' + e.notes + '</div>' : '') +
+      '</div>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderRepairsSection(repairs, role) {
+  const el = document.getElementById('detail-repairs-section');
+
+  let html =
+    '<div class="glass detail-section">' +
+    '<div class="detail-section-hdr">' +
+      '<span class="detail-section-title">Repairs</span>' +
+      '<button class="btn-sm" onclick="openReportIssue()">Report ↗</button>' +
+    '</div>';
+
+  if (!repairs || repairs.length === 0) {
+    html += '<div style="padding:20px 18px;font-family:\'Space Mono\',monospace;font-size:0.5rem;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">No repairs logged</div>';
+  } else {
+    repairs.slice(0, 5).forEach(r => {
+      const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
+      html += '<div class="rep-entry" onclick="openRepairDetail(\'' + r.id + '\')">' +
+        '<div class="rep-entry-top">' +
+          '<span class="rep-id">' + r.id + '</span>' +
+          '<span class="rep-status-badge" style="background:' + st.bg + ';color:' + st.color + ';">' + r.status + '</span>' +
+        '</div>' +
+        '<div class="rep-issue">' + r.issue + '</div>' +
+        '<div class="rep-date">' + r.reported_date + ' · ' + r.reported_by + '</div>' +
+      '</div>';
+    });
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// =====================================================================
+// LOG SERVICE
+// =====================================================================
+function openLogService() {
+  if (!_currentAsset) return;
+  document.getElementById('ls-asset-code').textContent = _currentAsset.code + ' · ' + _currentAsset.name;
+  document.getElementById('ls-date').value   = new Date().toISOString().slice(0, 10);
+  document.getElementById('ls-vendor').value = '';
+  document.getElementById('ls-cost').value   = '';
+  document.getElementById('ls-notes').value  = '';
+  document.getElementById('ls-feedback').textContent = '';
+  document.getElementById('ls-feedback').className   = 'feedback muted';
+  showPanel('panel-log-service');
+}
+
+async function submitLogService() {
+  const s = getSession();
+  if (!s || !_currentAsset) return;
+
+  const date = document.getElementById('ls-date').value;
+  if (!date) { setLsFeedback('Service date required', 'err'); return; }
+
+  const btn = document.getElementById('ls-submit');
+  btn.disabled = true; btn.textContent = 'Logging…';
+
+  const res = await api('addServiceEntry', {
+    token: s.token,
+    payload: {
+      asset_code:  _currentAsset.code,
+      service_date: date,
+      vendor_name:  document.getElementById('ls-vendor').value.trim(),
+      cost:         Number(document.getElementById('ls-cost').value) || 0,
+      notes:        document.getElementById('ls-notes').value.trim()
+    }
+  });
+
+  btn.disabled = false; btn.textContent = 'Log Service';
+
+  if (!res.ok) { setLsFeedback(res.error || 'Failed', 'err'); return; }
+
+  // Update local asset cache
+  _currentAsset.last_service_date = res.service_date;
+  _allAssets = _allAssets.map(a => a.code === _currentAsset.code
+    ? Object.assign({}, a, { last_service_date: res.service_date }) : a);
+
+  showPanel('panel-asset-detail');
+  // Refresh detail with new service log
+  openAssetDetail(_currentAsset.code);
+}
+
+function setLsFeedback(t, k) {
+  const el = document.getElementById('ls-feedback');
+  el.textContent = t; el.className = 'feedback ' + (k || 'muted');
+}
+
+// =====================================================================
+// REPORT ISSUE
+// =====================================================================
+function openReportIssue() {
+  if (!_currentAsset) return;
+  document.getElementById('ri-asset-code').textContent = _currentAsset.code + ' · ' + _currentAsset.name;
+  document.getElementById('ri-issue').value = '';
+  document.getElementById('ri-notes').value = '';
+  document.getElementById('ri-feedback').textContent = '';
+  document.getElementById('ri-feedback').className   = 'feedback muted';
+  showPanel('panel-report-issue');
+}
+
+async function submitReportIssue() {
+  const s = getSession();
+  if (!s || !_currentAsset) return;
+
+  const issue = document.getElementById('ri-issue').value.trim();
+  if (!issue) { setRiFeedback('Describe the issue', 'err'); return; }
+
+  const btn = document.getElementById('ri-submit');
+  btn.disabled = true; btn.textContent = 'Sending…';
+
+  const res = await api('reportRepair', {
+    token: s.token,
+    payload: {
+      asset_code: _currentAsset.code,
+      issue:      issue,
+      notes:      document.getElementById('ri-notes').value.trim()
+    }
+  });
+
+  btn.disabled = false; btn.textContent = 'Send for Approval';
+
+  if (!res.ok) { setRiFeedback(res.error || 'Failed', 'err'); return; }
+
+  setRiFeedback('Sent · ' + res.repairId, 'ok');
+  document.getElementById('ri-issue').value = '';
+  document.getElementById('ri-notes').value = '';
+  setTimeout(() => {
+    showPanel('panel-asset-detail');
+    openAssetDetail(_currentAsset.code);
+  }, 1200);
+}
+
+function setRiFeedback(t, k) {
+  const el = document.getElementById('ri-feedback');
+  el.textContent = t; el.className = 'feedback ' + (k || 'muted');
+}
+
+// =====================================================================
 // ASSET DETAIL + EDIT
 // =====================================================================
 let _currentAsset = null;
@@ -1603,8 +1957,9 @@ async function openAssetDetail(code) {
   document.getElementById('detail-edit').style.display = 'none';
   document.getElementById('detail-view').style.display = 'block';
   document.getElementById('detail-edit-btn').textContent = '✎';
+  document.getElementById('detail-service-section').innerHTML = '';
+  document.getElementById('detail-repairs-section').innerHTML = '';
 
-  // Render from cache immediately
   const cached = _allAssets.find(a => a.code === code);
   const s = getSession();
   if (cached) {
@@ -1617,15 +1972,24 @@ async function openAssetDetail(code) {
       '<div style="padding:24px;text-align:center;"><div class="loader"><div class="loader-dot"></div></div></div>';
   }
 
-  // Fresh fetch in background for complete data
   if (!s) return;
-  const res = await api('getAsset', { token: s.token, code: code });
-  if (!res.ok) return;
-  _currentAsset = res.asset;
-  renderAssetDetail(res.asset, s.user.role);
+
+  // Fetch asset + service log + repairs in parallel
+  const [assetRes, svcRes, repRes] = await Promise.all([
+    api('getAsset',       { token: s.token, code: code }),
+    api('listServiceLog', { token: s.token, assetCode: code }),
+    api('listRepairs',    { token: s.token, filters: { asset_code: code } })
+  ]);
+
+  if (!assetRes.ok) return;
+  _currentAsset = assetRes.asset;
+  const entries = svcRes.ok  ? svcRes.entries  : [];
+  const repairs = repRes.ok  ? repRes.repairs   : [];
+
+  renderAssetDetail(_currentAsset, s.user.role, entries, repairs);
 }
 
-function renderAssetDetail(asset, role) {
+function renderAssetDetail(asset, role, serviceEntries, repairs) {
   document.getElementById('detail-code').textContent = asset.code;
   document.getElementById('detail-name').textContent = asset.name;
 
@@ -1667,6 +2031,9 @@ function renderAssetDetail(asset, role) {
 
   document.getElementById('detail-foot').textContent =
     asset.drive_folder_id ? 'Drive folder linked' : 'No Drive folder';
+
+  renderServiceSection(asset, serviceEntries || []);
+  renderRepairsSection(repairs || [], role);
 }
 
 function toggleEditMode() {
@@ -1762,7 +2129,7 @@ async function submitUpdateAsset() {
   _allAssets = _allAssets.map(a => a.code === _currentAsset.code ? Object.assign({}, a, payload) : a);
 
   cancelEdit();
-  renderAssetDetail(_currentAsset, s.user.role);
+  renderAssetDetail(_currentAsset, s.user.role, [], []);
 }
 
 async function openAddAsset() {
