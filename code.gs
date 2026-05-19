@@ -1024,23 +1024,41 @@ function getDashboardData(token) {
     if (c.active === true) categories.push(c);
   }
 
-  // Pending approval count (Owner only)
-  let pendingCount = 0;
-  if (normalizeRole(auth.user.role) === 'Owner') {
-    const repData = ss.getSheetByName('Repair_Journal').getDataRange().getValues();
-    const stIdx   = repData[0].indexOf('status');
+  // Repair counts — read once, split by role
+  let pendingCount      = 0; // Reported: needs owner approval
+  let activeRepairCount = 0; // Post-approval, pre-verified: in progress
+
+  const repSheet = ss.getSheetByName('Repair_Journal');
+  if (repSheet.getLastRow() > 1) {
+    const repData  = repSheet.getDataRange().getValues();
+    const repH     = repData[0];
+    const stIdx    = repH.indexOf('status');
+    const rbIdx    = repH.indexOf('reported_by');
+    const role     = normalizeRole(auth.user.role);
+    const ACTIVE   = ['Owner Approved', 'Vendor Assigned', 'In Progress', 'Completed'];
+
     for (let i = 1; i < repData.length; i++) {
-      if (String(repData[i][stIdx]).trim() === 'Reported') pendingCount++;
+      const status   = String(repData[i][stIdx] || '').trim();
+      const reporter = String(repData[i][rbIdx] || '').trim();
+
+      if (role === 'Owner') {
+        if (status === 'Reported') pendingCount++;
+        if (ACTIVE.includes(status)) activeRepairCount++;
+      } else {
+        // Manager: count their own repairs that owner has acted on
+        if (reporter === auth.user.email && ACTIVE.includes(status)) activeRepairCount++;
+      }
     }
   }
 
   return {
-    ok:         true,
-    user:       auth.user,
-    meta:       { version: APP_VERSION, sessionHours: SESSION_HOURS },
-    outlets:    outlets,
-    categories: categories,
-    pendingCount: pendingCount
+    ok:               true,
+    user:             auth.user,
+    meta:             { version: APP_VERSION, sessionHours: SESSION_HOURS },
+    outlets:          outlets,
+    categories:       categories,
+    pendingCount:     pendingCount,
+    activeRepairCount: activeRepairCount
   };
 }
 

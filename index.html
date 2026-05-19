@@ -1164,15 +1164,18 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
         </div>
         <span class="phase-tag live">Live</span>
       </div>
-      <div class="glass nav-item" onclick="openAssetRegistry()">
+      <div class="glass nav-item" onclick="openMyRepairs()">
         <div class="nav-left">
           <div class="nav-icon">◇</div>
           <div class="nav-text">
-            <div class="nav-title">Report Issue</div>
-            <div class="nav-sub">Open asset → Report ↗</div>
+            <div class="nav-title">My Repairs</div>
+            <div class="nav-sub">Track issues · report new</div>
           </div>
         </div>
-        <span class="phase-tag live">Live</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="approval-badge" id="my-repairs-badge">0</span>
+          <span class="phase-tag live">Live</span>
+        </div>
       </div>
       <div class="glass nav-item locked">
         <div class="nav-left">
@@ -1375,6 +1378,18 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
       <h2 class="panel-title" style="flex:1;">Approvals</h2>
     </div>
     <div id="approvals-list"></div>
+  </section>
+
+  <!-- ============== MY REPAIRS (MANAGER) ============== -->
+  <section class="panel" id="panel-my-repairs">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="goToDashboard()">‹</button>
+      <h2 class="panel-title" style="flex:1;">My Repairs</h2>
+      <button class="back-btn" onclick="openAssetRegistry()"
+        style="font-size:20px;color:var(--gold);border-color:var(--gold);"
+        title="Report new issue">+</button>
+    </div>
+    <div id="my-repairs-list"></div>
   </section>
 
   <!-- ============== REPAIR DETAIL ============== -->
@@ -1733,10 +1748,11 @@ async function preloadAppData(token) {
   const [dashRes, assetsRes] = await Promise.all([dashPromise, assetsPromise]);
 
   if (dashRes.ok) {
-    _outlets      = dashRes.outlets    || [];
-    _categories   = dashRes.categories || [];
-    _pendingCount = dashRes.pendingCount || 0;
-    _dashMeta     = dashRes.meta;
+    _outlets           = dashRes.outlets    || [];
+    _categories        = dashRes.categories || [];
+    _pendingCount      = dashRes.pendingCount      || 0;
+    _activeRepairCount = dashRes.activeRepairCount || 0;
+    _dashMeta          = dashRes.meta;
   }
   if (assetsRes.ok) {
     _allAssets = assetsRes.assets || [];
@@ -1773,6 +1789,7 @@ async function routeToRole(user) {
     document.getElementById('mgrAvatar').textContent = initials;
     if (_dashMeta)
       document.getElementById('mgrFoot').textContent = 'Session active · ' + _dashMeta.version;
+    updateMyRepairsBadge(_activeRepairCount);
     showPanel('panel-manager');
   } else {
     setFeedback('Unknown role: ' + user.role, 'err');
@@ -1841,6 +1858,82 @@ function updateApprovalBadge(count) {
   }
 }
 
+function updateMyRepairsBadge(count) {
+  const badge = document.getElementById('my-repairs-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// =====================================================================
+// MY REPAIRS (MANAGER)
+// =====================================================================
+async function openMyRepairs() {
+  showPanel('panel-my-repairs');
+  updateMyRepairsBadge(0); // clear badge once they open the panel
+  const container = document.getElementById('my-repairs-list');
+  container.innerHTML =
+    '<div style="text-align:center;padding:48px 0;">' +
+    '<div class="loader"><div class="loader-dot"></div>' +
+    '<div class="loader-label"><span class="loader-label-text">Loading</span></div></div></div>';
+  await new Promise(r => requestAnimationFrame(r));
+
+  const s = getSession();
+  if (!s) return;
+
+  const res = await api('listRepairs', { token: s.token, filters: {} });
+  if (!res.ok) {
+    container.innerHTML =
+      '<div style="padding:32px 24px;font-family:\'Space Mono\',monospace;font-size:0.6rem;' +
+      'color:var(--danger);text-align:center;">' + escHtml(res.error || 'Failed') + '</div>';
+    return;
+  }
+  renderMyRepairs(res.repairs || []);
+}
+
+function renderMyRepairs(repairs) {
+  const container = document.getElementById('my-repairs-list');
+
+  if (repairs.length === 0) {
+    container.innerHTML =
+      '<div class="glass empty-state">' +
+      '<div class="empty-icon">◇</div>' +
+      '<div class="empty-text">No repairs reported yet</div>' +
+      '<div style="margin-top:12px;font-family:\'Space Mono\',monospace;font-size:0.48rem;' +
+           'letter-spacing:2px;color:var(--text3);">Tap + to report via an asset</div>' +
+      '</div>';
+    return;
+  }
+
+  // Sort: active first, then by date descending
+  const ORDER = { 'Reported':0,'Owner Approved':1,'Vendor Assigned':2,'In Progress':3,'Completed':4,'Verified':5,'Rejected':6 };
+  repairs.sort((a, b) => (ORDER[a.status]||9) - (ORDER[b.status]||9) || (b.reported_date > a.reported_date ? 1 : -1));
+
+  container.innerHTML = repairs.map(r => myRepairCardHTML(r)).join('');
+}
+
+function myRepairCardHTML(r) {
+  const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
+  return (
+    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\')" style="cursor:pointer;">' +
+    '<div style="padding:14px 18px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+        '<span style="font-family:\'Space Mono\',monospace;font-size:0.5rem;color:var(--gold);letter-spacing:1.5px;">' + escHtml(r.asset_code) + '</span>' +
+        '<span class="rep-status-badge" style="background:' + st.bg + ';color:' + st.color + ';font-size:0.45rem;padding:3px 8px;">' + r.status + '</span>' +
+      '</div>' +
+      '<div style="font-size:0.9rem;color:var(--text);line-height:1.4;margin-bottom:6px;">' + escHtml(r.issue) + '</div>' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:0.45rem;color:var(--text3);">' +
+        r.reported_date + ' · ' + r.id +
+      '</div>' +
+    '</div>' +
+    '</div>'
+  );
+}
+
 async function openApprovals() {
   showPanel('panel-approvals');
   const container = document.getElementById('approvals-list');
@@ -1853,16 +1946,23 @@ async function openApprovals() {
   const s = getSession();
   if (!s) return;
 
-  const res = await api('listApprovals', { token: s.token });
+  // Fetch ALL repairs — split client-side into pending + active
+  const res = await api('listRepairs', { token: s.token, filters: {} });
   if (!res.ok) {
     container.innerHTML =
       '<div style="padding:24px;text-align:center;font-family:\'Space Mono\',monospace;' +
       'font-size:0.6rem;letter-spacing:2px;color:var(--danger);">' +
-      (res.error || 'Failed to load') + '</div>';
+      escHtml(res.error || 'Failed to load') + '</div>';
     return;
   }
 
-  _pendingApprovals = res.pending || [];
+  const all = res.repairs || [];
+  _pendingApprovals = all.filter(r => r.status === 'Reported')
+    .sort((a, b) => a.reported_date > b.reported_date ? 1 : -1);
+  _activeRepairs = all.filter(r =>
+    ['Owner Approved', 'Vendor Assigned', 'In Progress', 'Completed'].includes(r.status)
+  ).sort((a, b) => a.reported_date > b.reported_date ? 1 : -1);
+
   renderApprovalsList();
 }
 
@@ -1870,16 +1970,46 @@ function renderApprovalsList() {
   const container = document.getElementById('approvals-list');
   updateApprovalBadge(_pendingApprovals.length);
 
+  let html = '';
+
+  // Section 1 — Awaiting approval
+  html += '<div style="font-family:\'Space Mono\',monospace;font-size:0.5rem;letter-spacing:3px;' +
+    'text-transform:uppercase;color:var(--text3);margin:0 4px 10px;">Awaiting approval</div>';
+
   if (_pendingApprovals.length === 0) {
-    container.innerHTML =
-      '<div class="glass empty-state">' +
-      '<div class="empty-icon">✦</div>' +
-      '<div class="empty-text">No pending approvals</div>' +
-      '</div>';
-    return;
+    html += '<div class="glass empty-state" style="padding:20px 24px;margin-bottom:16px;">' +
+      '<div class="empty-icon" style="font-size:1.2rem;">✦</div>' +
+      '<div class="empty-text">No pending approvals</div></div>';
+  } else {
+    html += _pendingApprovals.map((r, idx) => approvalCardHTML(r, idx)).join('');
   }
 
-  container.innerHTML = _pendingApprovals.map((r, idx) => approvalCardHTML(r, idx)).join('');
+  // Section 2 — Active repairs in progress
+  if (_activeRepairs.length > 0) {
+    html += '<div style="font-family:\'Space Mono\',monospace;font-size:0.5rem;letter-spacing:3px;' +
+      'text-transform:uppercase;color:var(--text3);margin:20px 4px 10px;">In progress</div>';
+    html += _activeRepairs.map(r => activeRepairCardHTML(r)).join('');
+  }
+
+  container.innerHTML = html;
+}
+
+function activeRepairCardHTML(r) {
+  const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
+  return (
+    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\')" style="cursor:pointer;">' +
+    '<div style="padding:14px 18px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+        '<span style="font-family:\'Space Mono\',monospace;font-size:0.5rem;color:var(--gold);letter-spacing:1.5px;">' + escHtml(r.asset_code) + '</span>' +
+        '<span class="rep-status-badge" style="background:' + st.bg + ';color:' + st.color + ';font-size:0.45rem;padding:3px 8px;">' + r.status + '</span>' +
+      '</div>' +
+      '<div style="font-size:0.9rem;color:var(--text);line-height:1.4;margin-bottom:5px;">' + escHtml(r.issue) + '</div>' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:0.45rem;color:var(--text3);">' +
+        r.reported_date + ' · ' + r.reported_by +
+      '</div>' +
+    '</div>' +
+    '</div>'
+  );
 }
 
 function approvalCardHTML(r, idx) {
@@ -2286,11 +2416,13 @@ init();
 // =====================================================================
 // ASSET REGISTRY
 // =====================================================================
-let _outlets      = [];
-let _categories   = [];
-let _allAssets    = [];
-let _dashMeta     = null;
-let _pendingCount = 0;
+let _outlets           = [];
+let _categories        = [];
+let _allAssets         = [];
+let _dashMeta          = null;
+let _pendingCount      = 0;
+let _activeRepairCount = 0;
+let _activeRepairs     = []; // owner: in-progress repairs shown in approvals panel
 
 function goToDashboard() {
   const s = getSession();
