@@ -1918,8 +1918,9 @@ function renderMyRepairs(repairs) {
 
 function myRepairCardHTML(r) {
   const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
+  const isDone = ['Completed', 'Verified'].includes(r.status);
   return (
-    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\',\'panel-my-repairs\')" style="cursor:pointer;">' +
+    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\',\'panel-my-repairs\')" style="cursor:pointer;opacity:' + (isDone ? '0.5' : '1') + ';transition:opacity 0.2s;">' +
     '<div style="padding:14px 18px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
         '<span style="font-family:\'Space Mono\',monospace;font-size:0.5rem;color:var(--gold);letter-spacing:1.5px;">' + escHtml(r.asset_code) + '</span>' +
@@ -1996,8 +1997,9 @@ function renderApprovalsList() {
 
 function activeRepairCardHTML(r) {
   const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
+  const isDone = ['Completed', 'Verified'].includes(r.status);
   return (
-    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\',\'panel-approvals\')" style="cursor:pointer;">' +
+    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\',\'panel-approvals\')" style="cursor:pointer;opacity:' + (isDone ? '0.5' : '1') + ';transition:opacity 0.2s;">' +
     '<div style="padding:14px 18px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
         '<span style="font-family:\'Space Mono\',monospace;font-size:0.5rem;color:var(--gold);letter-spacing:1.5px;">' + escHtml(r.asset_code) + '</span>' +
@@ -2536,13 +2538,13 @@ function assetCardHTML(a) {
 // SERVICE + REPAIR HELPERS
 // =====================================================================
 const REPAIR_STATUS_STYLE = {
-  'Reported':        { bg: 'rgba(255,149,0,0.12)',  color: 'var(--warning)' },
-  'Owner Approved':  { bg: 'rgba(52,199,89,0.12)',  color: 'var(--success)' },
-  'Vendor Assigned': { bg: 'rgba(10,132,255,0.12)', color: '#0a84ff' },
-  'In Progress':     { bg: 'rgba(10,132,255,0.12)', color: '#0a84ff' },
-  'Completed':       { bg: 'rgba(52,199,89,0.12)',  color: 'var(--success)' },
-  'Verified':        { bg: 'rgba(52,199,89,0.18)',  color: 'var(--success)' },
-  'Rejected':        { bg: 'rgba(255,59,48,0.12)',  color: 'var(--danger)' }
+  'Reported':        { bg: 'rgba(255,149,0,0.12)',   color: 'var(--warning)' },
+  'Owner Approved':  { bg: 'rgba(52,199,89,0.12)',   color: 'var(--success)' },
+  'Vendor Assigned': { bg: 'rgba(10,132,255,0.12)',  color: '#0a84ff' },
+  'In Progress':     { bg: 'rgba(10,132,255,0.12)',  color: '#0a84ff' },
+  'Completed':       { bg: 'rgba(134,134,139,0.14)', color: 'var(--text3)' },
+  'Verified':        { bg: 'rgba(134,134,139,0.14)', color: 'var(--text3)' },
+  'Rejected':        { bg: 'rgba(255,59,48,0.12)',   color: 'var(--danger)' }
 };
 
 function calcNextServiceDate(lastDate, freqMonths) {
@@ -2632,7 +2634,8 @@ function renderRepairsSection(repairs, role) {
   } else {
     repairs.slice(0, 5).forEach(r => {
       const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
-      html += '<div class="rep-entry" onclick="openRepairDetail(\'' + r.id + '\')">' +
+      const isDone = ['Completed', 'Verified'].includes(r.status);
+      html += '<div class="rep-entry" onclick="openRepairDetail(\'' + r.id + '\')" style="opacity:' + (isDone ? '0.5' : '1') + ';transition:opacity 0.2s;">' +
         '<div class="rep-entry-top">' +
           '<span class="rep-id">' + r.id + '</span>' +
           '<span class="rep-status-badge" style="background:' + st.bg + ';color:' + st.color + ';">' + r.status + '</span>' +
