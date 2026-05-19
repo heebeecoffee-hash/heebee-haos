@@ -908,6 +908,67 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
 }
 
 /* =====================================================================
+   PRELOAD OVERLAY
+   ===================================================================== */
+#preload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s cubic-bezier(0.4,0,0.2,1);
+}
+#preload-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+.preload-brand {
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 200;
+  font-size: clamp(2rem, 7vw, 2.8rem);
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.preload-sub {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.52rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-top: -10px;
+}
+.preload-bar-track {
+  width: 160px;
+  height: 1px;
+  background: var(--border2);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+.preload-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--gold);
+  border-radius: 99px;
+  transition: width 0.65s cubic-bezier(0.4,0,0.2,1);
+}
+.preload-status {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.48rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+  min-height: 14px;
+}
+
+/* =====================================================================
    FOOTER
    ===================================================================== */
 .foot {
@@ -922,6 +983,16 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
 </style>
 </head>
 <body class="light">
+
+<!-- preload overlay — shown once at every login/resume until all data is cached -->
+<div id="preload-overlay">
+  <div class="preload-brand">Heebee</div>
+  <div class="preload-sub">Asset OS</div>
+  <div class="preload-bar-track">
+    <div class="preload-bar-fill" id="preload-bar-fill"></div>
+  </div>
+  <div class="preload-status" id="preload-status">Connecting</div>
+</div>
 
 <!-- ambient -->
 <div class="bg-layer">
@@ -1625,54 +1696,87 @@ async function submitLogin() {
 // =====================================================================
 // ROLE ROUTING + DASHBOARD HYDRATION
 // =====================================================================
+// =====================================================================
+// PRELOADER
+// =====================================================================
+function showPreloader(pct, label) {
+  document.getElementById('preload-overlay').classList.add('active');
+  if (pct !== undefined)
+    document.getElementById('preload-bar-fill').style.width = pct + '%';
+  if (label)
+    document.getElementById('preload-status').textContent = label;
+}
+
+function hidePreloader() {
+  document.getElementById('preload-overlay').classList.remove('active');
+  // Reset for next login
+  document.getElementById('preload-bar-fill').style.width = '0%';
+  document.getElementById('preload-status').textContent = 'Connecting';
+}
+
+async function preloadAppData(token) {
+  showPreloader(8, 'Connecting');
+  await new Promise(r => requestAnimationFrame(r));
+
+  // Fire both requests in parallel — track which resolves first
+  let resolved = 0;
+  const tick = (label) => {
+    resolved++;
+    showPreloader(resolved === 1 ? 52 : 88, label);
+  };
+
+  const dashPromise   = api('getDashboardData', { token })
+    .then(r => { tick('Syncing assets'); return r; });
+  const assetsPromise = api('listAssets', { token, filters: {} })
+    .then(r => { tick('Almost ready');  return r; });
+
+  const [dashRes, assetsRes] = await Promise.all([dashPromise, assetsPromise]);
+
+  if (dashRes.ok) {
+    _outlets      = dashRes.outlets    || [];
+    _categories   = dashRes.categories || [];
+    _pendingCount = dashRes.pendingCount || 0;
+    _dashMeta     = dashRes.meta;
+  }
+  if (assetsRes.ok) {
+    _allAssets = assetsRes.assets || [];
+  }
+
+  showPreloader(100, 'Ready');
+  await new Promise(r => setTimeout(r, 480));
+  hidePreloader();
+}
+
+// =====================================================================
+// ROLE ROUTING + DASHBOARD HYDRATION
+// =====================================================================
 async function routeToRole(user) {
   const initials = (user.name || user.email || '?').trim()[0].toUpperCase();
-
-  if (user.role === 'Owner') {
-    document.getElementById('ownerName').textContent = user.name || user.email;
-    document.getElementById('ownerAvatar').textContent = initials;
-    showPanel('panel-owner');
-    hydrateOwner();
-  } else if (user.role === 'Manager') {
-    document.getElementById('mgrName').textContent = user.name || user.email;
-    document.getElementById('mgrAvatar').textContent = initials;
-    showPanel('panel-manager');
-    hydrateManager();
-  } else {
-    setFeedback('Unknown role: ' + user.role, 'err');
-    return;
-  }
   startHeartbeat();
   startIdleWatcher();
-}
 
-async function hydrateOwner() {
+  // Preload everything — overlay covers screen, fills bar, then fades
   const s = getSession();
-  if (!s) return;
+  if (s) await preloadAppData(s.token);
 
-  const r = await api('getDashboardData', { token: s.token });
-  if (!r.ok) return;
-
-  // Cache dropdown data — avoids re-fetching when opening asset registry
-  if (r.outlets)    _outlets    = r.outlets;
-  if (r.categories) _categories = r.categories;
-
-  document.getElementById('ownerVersion').textContent     = r.meta.version;
-  document.getElementById('ownerOutletCount').textContent = r.outlets.length;
-  document.getElementById('ownerCatCount').textContent    = r.categories.length;
-  updateApprovalBadge(r.pendingCount || 0);
-}
-
-async function hydrateManager() {
-  const s = getSession();
-  if (!s) return;
-  const r = await api('getDashboardData', { token: s.token });
-  if (!r.ok) return;
-
-  if (r.outlets)    _outlets    = r.outlets;
-  if (r.categories) _categories = r.categories;
-
-  document.getElementById('mgrFoot').textContent = 'Session active · ' + r.meta.version;
+  if (user.role === 'Owner') {
+    document.getElementById('ownerName').textContent   = user.name || user.email;
+    document.getElementById('ownerAvatar').textContent = initials;
+    // Hydrate status card from cached globals (no extra API call)
+    if (_dashMeta) document.getElementById('ownerVersion').textContent = _dashMeta.version;
+    document.getElementById('ownerOutletCount').textContent = _outlets.length;
+    document.getElementById('ownerCatCount').textContent    = _categories.length;
+    updateApprovalBadge(_pendingCount);
+    showPanel('panel-owner');
+  } else if (user.role === 'Manager') {
+    document.getElementById('mgrName').textContent   = user.name || user.email;
+    document.getElementById('mgrAvatar').textContent = initials;
+    if (_dashMeta)
+      document.getElementById('mgrFoot').textContent = 'Session active · ' + _dashMeta.version;
+    showPanel('panel-manager');
+  } else {
+    setFeedback('Unknown role: ' + user.role, 'err');
+  }
 }
 
 // =====================================================================
@@ -2078,9 +2182,11 @@ init();
 // =====================================================================
 // ASSET REGISTRY
 // =====================================================================
-let _outlets = [];
-let _categories = [];
-let _allAssets = [];
+let _outlets      = [];
+let _categories   = [];
+let _allAssets    = [];
+let _dashMeta     = null;
+let _pendingCount = 0;
 
 function goToDashboard() {
   const s = getSession();
