@@ -2197,12 +2197,6 @@ function renderRepairDetail(r, role) {
             '<div style="font-family:\'Space Mono\',monospace;font-size:0.65rem;color:var(--gold);">' + actCost + '</div></div>'
           : '') +
       '</div>' +
-      (r.notes
-        ? '<div style="padding:10px 14px;background:var(--surface2);border-radius:12px;border-left:2px solid var(--gold);">' +
-            '<div class="label" style="margin-bottom:4px;">Notes</div>' +
-            '<div style="font-size:0.85rem;color:var(--text2);line-height:1.55;">' + escHtml(r.notes) + '</div>' +
-          '</div>'
-        : '') +
     '</div>';
 
   // Timeline
