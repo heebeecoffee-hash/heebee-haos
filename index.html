@@ -1139,6 +1139,10 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
           <label class="label">Service Frequency (months)</label>
           <input type="number" class="input" id="fa-service-freq" placeholder="6" min="1">
         </div>
+        <div class="field">
+          <label class="label">Service Cost Cap ₹</label>
+          <input type="number" class="input" id="fa-service-cap" placeholder="Max routine service cost">
+        </div>
       </div>
 
       <div class="field" style="margin-top:8px;">
@@ -1191,6 +1195,10 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
       <div class="field">
         <label class="label">Issue Description</label>
         <textarea class="input" id="ri-issue" style="min-height:100px;" placeholder="Describe the problem clearly…"></textarea>
+      </div>
+      <div class="field">
+        <label class="label">Estimated Repair Cost ₹</label>
+        <input type="number" class="input" id="ri-estimated-cost" placeholder="Your best estimate">
       </div>
       <div class="field">
         <label class="label">Notes</label>
@@ -1289,6 +1297,10 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
           <div class="field">
             <label class="label">Service Frequency (months)</label>
             <input type="number" class="input" id="de-service-freq" placeholder="6" min="1">
+          </div>
+          <div class="field">
+            <label class="label">Service Cost Cap ₹</label>
+            <input type="number" class="input" id="de-service-cap" placeholder="Max routine service cost">
           </div>
         </div>
         <div class="field" style="margin-top:8px;">
@@ -1769,17 +1781,27 @@ function renderServiceSection(asset, entries) {
   const el = document.getElementById('detail-service-section');
   if (!asset.serviceable) { el.innerHTML = ''; return; }
 
-  const nextDue  = calcNextServiceDate(asset.last_service_date, asset.service_frequency_months);
-  const dueClass = dueDateClass(nextDue);
+  const nextDue     = calcNextServiceDate(asset.last_service_date, asset.service_frequency_months);
+  const dueClass    = dueDateClass(nextDue);
+  const today       = new Date().toISOString().slice(0, 10);
+  const withinWindow = nextDue && today < nextDue;
+
   const dueLabel = nextDue
     ? (dueClass === 'overdue' ? nextDue + ' · OVERDUE' : dueClass === 'soon' ? nextDue + ' · DUE SOON' : nextDue)
     : '—';
 
+  const cap = Number(asset.service_cost_cap) || 0;
+  const capLabel = cap > 0 ? '₹' + Number(cap).toLocaleString('en-IN') + ' cap' : '';
+
+  const logBtn = withinWindow
+    ? '<button class="btn-sm" disabled title="Frequency window active — next allowed ' + nextDue + '" style="opacity:0.38;cursor:not-allowed;">+ Log</button>'
+    : '<button class="btn-sm primary" onclick="openLogService()">+ Log</button>';
+
   let html =
     '<div class="glass detail-section">' +
     '<div class="detail-section-hdr">' +
-      '<span class="detail-section-title">Service</span>' +
-      '<button class="btn-sm primary" onclick="openLogService()">+ Log</button>' +
+      '<span class="detail-section-title">Service' + (capLabel ? ' · <span style="color:var(--gold);font-size:0.45rem;">' + capLabel + '</span>' : '') + '</span>' +
+      logBtn +
     '</div>' +
     '<div class="next-due-row">' +
       '<span class="next-due-label">Next due</span>' +
@@ -1900,6 +1922,7 @@ function openReportIssue() {
   if (!_currentAsset) return;
   document.getElementById('ri-asset-code').textContent = _currentAsset.code + ' · ' + _currentAsset.name;
   document.getElementById('ri-issue').value = '';
+  document.getElementById('ri-estimated-cost').value = '';
   document.getElementById('ri-notes').value = '';
   document.getElementById('ri-feedback').textContent = '';
   document.getElementById('ri-feedback').className   = 'feedback muted';
@@ -1919,9 +1942,10 @@ async function submitReportIssue() {
   const res = await api('reportRepair', {
     token: s.token,
     payload: {
-      asset_code: _currentAsset.code,
-      issue:      issue,
-      notes:      document.getElementById('ri-notes').value.trim()
+      asset_code:     _currentAsset.code,
+      issue:          issue,
+      estimated_cost: Number(document.getElementById('ri-estimated-cost').value) || 0,
+      notes:          document.getElementById('ri-notes').value.trim()
     }
   });
 
@@ -2016,6 +2040,8 @@ function renderAssetDetail(asset, role, serviceEntries, repairs) {
     asset.serviceable ? ['Service Type', asset.service_type || '—'] : null,
     asset.serviceable ? ['Frequency',    asset.service_frequency_months
       ? asset.service_frequency_months + ' months' : '—'] : null,
+    asset.serviceable ? ['Cost Cap ₹',   asset.service_cost_cap
+      ? '₹' + Number(asset.service_cost_cap).toLocaleString('en-IN') : '—'] : null,
     ['Last Service', asset.last_service_date || '—'],
     ['Notes',   asset.notes || '—'],
     ['Added by', asset.created_by || '—'],
@@ -2065,6 +2091,7 @@ function openEditMode() {
   if (svc) {
     document.getElementById('de-service-type').value = _currentAsset.service_type || '6-monthly';
     document.getElementById('de-service-freq').value = _currentAsset.service_frequency_months || '';
+    document.getElementById('de-service-cap').value  = _currentAsset.service_cost_cap || '';
   }
 
   document.getElementById('detail-view').style.display = 'none';
@@ -2106,6 +2133,7 @@ async function submitUpdateAsset() {
     serviceable,
     service_type:             serviceable ? document.getElementById('de-service-type').value : '',
     service_frequency_months: serviceable ? (Number(document.getElementById('de-service-freq').value) || '') : '',
+    service_cost_cap:         serviceable ? (Number(document.getElementById('de-service-cap').value) || '') : '',
     location: document.getElementById('de-location').value.trim(),
     status:   document.getElementById('de-status').value,
     notes:    document.getElementById('de-notes').value.trim()
@@ -2216,6 +2244,7 @@ async function submitAddAsset() {
     serviceable,
     service_type:             serviceable ? document.getElementById('fa-service-type').value : '',
     service_frequency_months: serviceable ? (Number(document.getElementById('fa-service-freq').value) || '') : '',
+    service_cost_cap:         serviceable ? (Number(document.getElementById('fa-service-cap').value) || '') : '',
     location: document.getElementById('fa-location').value.trim(),
     status:   document.getElementById('fa-status').value,
     notes:    document.getElementById('fa-notes').value.trim()
@@ -2247,7 +2276,8 @@ async function submitAddAsset() {
 
 function resetAddAssetForm() {
   ['fa-name','fa-purchase-date','fa-purchase-value',
-   'fa-vendor','fa-warranty','fa-location','fa-notes'].forEach(id => {
+   'fa-vendor','fa-warranty','fa-location','fa-notes',
+   'fa-service-cap'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });

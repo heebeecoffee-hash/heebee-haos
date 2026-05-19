@@ -29,12 +29,14 @@ const SHEETS = {
   Categories:      ['code', 'name', 'default_serviceable', 'active', 'created_at'],
   Assets:          ['code', 'outlet', 'category', 'name', 'purchase_date', 'purchase_value',
                     'vendor_purchased', 'warranty_until', 'serviceable', 'service_type',
-                    'service_frequency_months', 'last_service_date', 'location', 'status',
-                    'notes', 'drive_folder_id', 'photo_count', 'created_by', 'created_at'],
+                    'service_frequency_months', 'service_cost_cap', 'last_service_date',
+                    'location', 'status', 'notes', 'drive_folder_id', 'photo_count',
+                    'created_by', 'created_at'],
   Stockyard:       ['asset_code', 'reason', 'moved_date', 'moved_by', 'estimated_value', 'notes'],
   Service_Log:     ['id', 'asset_code', 'service_date', 'vendor_id', 'cost', 'notes',
                     'performed_by', 'photos_added'],
-  Repair_Journal:  ['id', 'asset_code', 'reported_date', 'reported_by', 'issue', 'status',
+  Repair_Journal:  ['id', 'asset_code', 'reported_date', 'reported_by', 'issue',
+                    'estimated_cost', 'status',
                     'owner_approved_date', 'owner_approved_by', 'vendor_id',
                     'vendor_assigned_date', 'started_date', 'completed_date',
                     'verified_date', 'cost', 'notes'],
@@ -473,25 +475,26 @@ function addAsset(token, payload) {
 
   // Build the row matching SHEETS.Assets column order exactly.
   const row = [
-    code,
-    outlet,
-    category,
-    name,
-    normalizeDateStr(payload.purchase_date),
-    payload.purchase_value !== undefined ? payload.purchase_value : '',
-    String(payload.vendor_purchased || '').trim(),
-    normalizeDateStr(payload.warranty_until),
-    payload.serviceable === true || payload.serviceable === 'true' ? true : false,
-    String(payload.service_type || '').trim(),
-    payload.service_frequency_months !== undefined ? Number(payload.service_frequency_months) || '' : '',
-    '',                                          // last_service_date — empty on creation
-    String(payload.location || '').trim(),
-    String(payload.status   || 'active').trim(),
-    String(payload.notes    || '').trim(),
-    '',                                          // drive_folder_id — set below
-    0,                                           // photo_count
-    auth.user.email,
-    now
+    code,                                        // [0]  code
+    outlet,                                      // [1]  outlet
+    category,                                    // [2]  category
+    name,                                        // [3]  name
+    normalizeDateStr(payload.purchase_date),      // [4]  purchase_date
+    payload.purchase_value !== undefined ? payload.purchase_value : '',  // [5] purchase_value
+    String(payload.vendor_purchased || '').trim(), // [6] vendor_purchased
+    normalizeDateStr(payload.warranty_until),     // [7]  warranty_until
+    payload.serviceable === true || payload.serviceable === 'true' ? true : false, // [8] serviceable
+    String(payload.service_type || '').trim(),    // [9]  service_type
+    payload.service_frequency_months !== undefined ? Number(payload.service_frequency_months) || '' : '', // [10] service_frequency_months
+    payload.service_cost_cap !== undefined ? Number(payload.service_cost_cap) || '' : '', // [11] service_cost_cap
+    '',                                          // [12] last_service_date — empty on creation
+    String(payload.location || '').trim(),       // [13] location
+    String(payload.status   || 'active').trim(), // [14] status
+    String(payload.notes    || '').trim(),       // [15] notes
+    '',                                          // [16] drive_folder_id — set below
+    0,                                           // [17] photo_count
+    auth.user.email,                             // [18] created_by
+    now                                          // [19] created_at
   ];
 
   // Create Drive folder: HAOS_Assets/{outlet}/{code}/
@@ -507,8 +510,8 @@ function addAsset(token, payload) {
     Logger.log('Drive folder creation failed: ' + e.toString());
   }
 
-  // Slot drive_folder_id into the row (index 15, 0-based).
-  row[15] = driveFolderId;
+  // Slot drive_folder_id into the row (index 16, 0-based).
+  row[16] = driveFolderId;
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ss.getSheetByName('Assets').appendRow(row);
@@ -595,7 +598,7 @@ function updateAsset(token, code, payload) {
   const editable = [
     'name', 'purchase_date', 'purchase_value', 'vendor_purchased',
     'warranty_until', 'serviceable', 'service_type', 'service_frequency_months',
-    'location', 'status', 'notes'
+    'service_cost_cap', 'location', 'status', 'notes'
   ];
 
   editable.forEach(field => {
@@ -606,6 +609,7 @@ function updateAsset(token, code, payload) {
     if (field === 'purchase_date' || field === 'warranty_until') val = normalizeDateStr(val);
     if (field === 'serviceable') val = (val === true || val === 'true');
     if (field === 'service_frequency_months') val = Number(val) || '';
+    if (field === 'service_cost_cap') val = Number(val) || '';
     sheet.getRange(rowIdx, colIdx + 1).setValue(val);
   });
 
@@ -653,6 +657,28 @@ function addServiceEntry(token, payload) {
   const assets = sheetToObjects('Assets');
   const asset = assets.find(a => String(a.code).trim() === assetCode);
   if (!asset) return { ok: false, error: 'Asset not found: ' + assetCode };
+
+  // Frequency window enforcement — can't log again before next allowed date
+  const freq    = Number(asset.service_frequency_months) || 0;
+  const lastSvc = normalizeDateStr(asset.last_service_date);
+  if (freq > 0 && lastSvc) {
+    const lastDate   = new Date(lastSvc + 'T00:00:00');
+    const nextAllowed = new Date(lastDate);
+    nextAllowed.setMonth(nextAllowed.getMonth() + freq);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (today < nextAllowed) {
+      const nextStr = nextAllowed.toISOString().slice(0, 10);
+      return { ok: false, error: 'Next service allowed after ' + nextStr, next_allowed: nextStr };
+    }
+  }
+
+  // Cost cap enforcement — routine service must stay under cap
+  const cap  = Number(asset.service_cost_cap) || 0;
+  const cost = Number(payload.cost) || 0;
+  if (cap > 0 && cost > cap) {
+    return { ok: false, error: 'Cost ₹' + cost + ' exceeds cap ₹' + cap + '. Report as repair for owner approval.' };
+  }
 
   const id          = generateId('SVC');
   const serviceDate = normalizeDateStr(payload.service_date || new Date());
@@ -714,8 +740,9 @@ function reportRepair(token, payload) {
   if (!auth.ok) return auth;
   if (!payload) return { ok: false, error: 'Payload required' };
 
-  const assetCode = String(payload.asset_code || '').trim();
-  const issue     = String(payload.issue     || '').trim();
+  const assetCode     = String(payload.asset_code || '').trim();
+  const issue         = String(payload.issue     || '').trim();
+  const estimatedCost = payload.estimated_cost !== undefined ? Number(payload.estimated_cost) || 0 : 0;
   if (!assetCode) return { ok: false, error: 'asset_code required' };
   if (!issue)     return { ok: false, error: 'issue description required' };
 
@@ -726,12 +753,12 @@ function reportRepair(token, payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   // Repair_Journal row
-  // id | asset_code | reported_date | reported_by | issue | status |
+  // id | asset_code | reported_date | reported_by | issue | estimated_cost | status |
   // owner_approved_date | owner_approved_by | vendor_id |
   // vendor_assigned_date | started_date | completed_date |
   // verified_date | cost | notes
   ss.getSheetByName('Repair_Journal').appendRow([
-    id, assetCode, date, auth.user.email, issue, 'Reported',
+    id, assetCode, date, auth.user.email, issue, estimatedCost, 'Reported',
     '', '', '', '', '', '', '', 0,
     String(payload.notes || '').trim()
   ]);
@@ -894,6 +921,62 @@ function _advanceRepair(auth, repairId, newStatus, extra) {
 
   writeAudit(auth.user.email, 'repairStatus:' + newStatus, 'Repair_Journal', repairId, before, extra);
   return { ok: true, repairId: repairId, status: newStatus };
+}
+
+// =====================================================================
+// MIGRATIONS — run once from Apps Script editor after deploying
+// =====================================================================
+
+// Run this once to add service_cost_cap column to Assets sheet
+function migrateServiceCostCap() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Assets');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  if (headers.indexOf('service_cost_cap') !== -1) {
+    SpreadsheetApp.getUi().alert('service_cost_cap already exists in Assets — nothing to do.');
+    return;
+  }
+
+  const freqIdx = headers.indexOf('service_frequency_months');
+  if (freqIdx === -1) {
+    SpreadsheetApp.getUi().alert('service_frequency_months not found — check sheet structure.');
+    return;
+  }
+
+  // Insert column immediately after service_frequency_months (1-based col = freqIdx+1)
+  sheet.insertColumnAfter(freqIdx + 1);
+  const newCol = freqIdx + 2;
+  sheet.getRange(1, newCol).setValue('service_cost_cap')
+    .setFontWeight('bold').setBackground('#f5f5f7').setFontFamily('Inter');
+
+  SpreadsheetApp.getUi().alert('Done — service_cost_cap column added to Assets.');
+}
+
+// Run this once to add estimated_cost column to Repair_Journal sheet
+function migrateEstimatedCost() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Repair_Journal');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  if (headers.indexOf('estimated_cost') !== -1) {
+    SpreadsheetApp.getUi().alert('estimated_cost already exists in Repair_Journal — nothing to do.');
+    return;
+  }
+
+  const issueIdx = headers.indexOf('issue');
+  if (issueIdx === -1) {
+    SpreadsheetApp.getUi().alert('issue column not found — check sheet structure.');
+    return;
+  }
+
+  // Insert column immediately after issue (1-based col = issueIdx+1)
+  sheet.insertColumnAfter(issueIdx + 1);
+  const newCol = issueIdx + 2;
+  sheet.getRange(1, newCol).setValue('estimated_cost')
+    .setFontWeight('bold').setBackground('#f5f5f7').setFontFamily('Inter');
+
+  SpreadsheetApp.getUi().alert('Done — estimated_cost column added to Repair_Journal.');
 }
 
 // Owner approval queue — pending repairs only
