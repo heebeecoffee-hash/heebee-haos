@@ -1919,7 +1919,7 @@ function renderMyRepairs(repairs) {
 function myRepairCardHTML(r) {
   const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
   return (
-    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\')" style="cursor:pointer;">' +
+    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\',\'panel-my-repairs\')" style="cursor:pointer;">' +
     '<div style="padding:14px 18px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
         '<span style="font-family:\'Space Mono\',monospace;font-size:0.5rem;color:var(--gold);letter-spacing:1.5px;">' + escHtml(r.asset_code) + '</span>' +
@@ -1997,7 +1997,7 @@ function renderApprovalsList() {
 function activeRepairCardHTML(r) {
   const st = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
   return (
-    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\')" style="cursor:pointer;">' +
+    '<div class="glass approval-card" onclick="openRepairDetail(\'' + r.id + '\',\'panel-approvals\')" style="cursor:pointer;">' +
     '<div style="padding:14px 18px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
         '<span style="font-family:\'Space Mono\',monospace;font-size:0.5rem;color:var(--gold);letter-spacing:1.5px;">' + escHtml(r.asset_code) + '</span>' +
@@ -2029,7 +2029,7 @@ function approvalCardHTML(r, idx) {
       '<div style="font-family:\'Space Mono\',monospace;font-size:0.45rem;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">' +
         r.reported_by + ' · ' + r.reported_date +
       '</div>' +
-      '<button class="btn-sm" style="margin-bottom:4px;" onclick="openRepairDetail(\'' + r.id + '\')">View timeline →</button>' +
+      '<button class="btn-sm" style="margin-bottom:4px;" onclick="openRepairDetail(\'' + r.id + '\',\'panel-approvals\')">View timeline →</button>' +
     '</div>' +
     '<div class="approval-actions" id="apr-actions-' + idx + '">' +
       '<button class="btn-sm primary" style="background:var(--success);border-color:var(--success);color:#fff;flex:1;" ' +
@@ -2110,7 +2110,8 @@ async function submitApproval(idx, action) {
 // =====================================================================
 // REPAIR DETAIL
 // =====================================================================
-let _currentRepair = null;
+let _currentRepair      = null;
+let _repairDetailSource = 'panel-asset-detail'; // tracks where to go on back
 
 const REPAIR_STEPS = [
   { key: 'Reported',        dateField: 'reported_date',        byField: 'reported_by',       label: 'Reported' },
@@ -2131,7 +2132,8 @@ const REPAIR_NEXT_STATUS = {
   'Completed':       'Verified'
 };
 
-async function openRepairDetail(repairId) {
+async function openRepairDetail(repairId, source) {
+  _repairDetailSource = source || 'panel-asset-detail';
   showPanel('panel-repair-detail');
   document.getElementById('rd-repair-id').textContent = repairId;
   document.getElementById('rd-content').innerHTML =
@@ -2158,7 +2160,7 @@ async function openRepairDetail(repairId) {
 }
 
 function closeRepairDetail() {
-  showPanel('panel-asset-detail');
+  showPanel(_repairDetailSource);
 }
 
 function renderRepairDetail(r, role) {
