@@ -829,6 +829,61 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
 }
 
 /* =====================================================================
+   REPAIR TIMELINE
+   ===================================================================== */
+.repair-timeline { padding: 20px 24px 8px; }
+.timeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 0;
+}
+.tl-dot-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 14px;
+  flex-shrink: 0;
+}
+.tl-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border2);
+  background: transparent;
+  margin-top: 4px;
+  flex-shrink: 0;
+  transition: background 0.3s, border-color 0.3s;
+}
+.tl-dot.done    { background: var(--gold); border-color: var(--gold); }
+.tl-dot.current { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(184,134,11,0.18); }
+.tl-dot.rejected{ background: var(--danger); border-color: var(--danger); }
+.tl-line {
+  width: 1px; min-height: 24px; flex: 1;
+  background: var(--border2);
+  margin: 2px 0;
+}
+.tl-line.done { background: var(--gold); opacity: 0.35; }
+.tl-content { flex: 1; padding-bottom: 20px; }
+.tl-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.52rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.tl-label.done    { color: var(--gold); }
+.tl-label.current { color: var(--text); }
+.tl-label.rejected{ color: var(--danger); }
+.tl-meta {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.45rem;
+  color: var(--text3);
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.rd-action-area { padding: 0 24px 24px; }
+
+/* =====================================================================
    APPROVAL QUEUE
    ===================================================================== */
 .approval-badge {
@@ -1249,6 +1304,17 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
       <h2 class="panel-title" style="flex:1;">Approvals</h2>
     </div>
     <div id="approvals-list"></div>
+  </section>
+
+  <!-- ============== REPAIR DETAIL ============== -->
+  <section class="panel" id="panel-repair-detail">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="closeRepairDetail()">‹</button>
+      <h2 class="panel-title" id="rd-repair-id"
+        style="flex:1;font-family:'Space Mono',monospace;font-size:0.7rem;
+               letter-spacing:2px;color:var(--gold);margin:0;"></h2>
+    </div>
+    <div id="rd-content"></div>
   </section>
 
   <!-- ============== ASSET DETAIL ============== -->
@@ -1721,9 +1787,10 @@ function approvalCardHTML(r, idx) {
       '<div style="font-family:\'Space Mono\',monospace;font-size:0.48rem;letter-spacing:1px;color:var(--text3);margin-bottom:2px;">' +
         estCost +
       '</div>' +
-      '<div style="font-family:\'Space Mono\',monospace;font-size:0.45rem;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:0.45rem;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">' +
         r.reported_by + ' · ' + r.reported_date +
       '</div>' +
+      '<button class="btn-sm" style="margin-bottom:4px;" onclick="openRepairDetail(\'' + r.id + '\')">View timeline →</button>' +
     '</div>' +
     '<div class="approval-actions" id="apr-actions-' + idx + '">' +
       '<button class="btn-sm primary" style="background:var(--success);border-color:var(--success);color:#fff;flex:1;" ' +
@@ -1787,6 +1854,201 @@ async function submitApproval(idx, action) {
   // Remove approved/rejected item + re-render
   _pendingApprovals = _pendingApprovals.filter((_, i) => i !== idx);
   renderApprovalsList();
+}
+
+// =====================================================================
+// REPAIR DETAIL
+// =====================================================================
+let _currentRepair = null;
+
+const REPAIR_STEPS = [
+  { key: 'Reported',        dateField: 'reported_date',        byField: 'reported_by',       label: 'Reported' },
+  { key: 'Owner Approved',  dateField: 'owner_approved_date',  byField: 'owner_approved_by', label: 'Owner Approved' },
+  { key: 'Vendor Assigned', dateField: 'vendor_assigned_date', byField: null,                label: 'Vendor Assigned' },
+  { key: 'In Progress',     dateField: 'started_date',         byField: null,                label: 'In Progress' },
+  { key: 'Completed',       dateField: 'completed_date',       byField: null,                label: 'Completed' },
+  { key: 'Verified',        dateField: 'verified_date',        byField: null,                label: 'Verified' }
+];
+const REPAIR_STATUS_IDX = {
+  'Reported': 0, 'Owner Approved': 1, 'Vendor Assigned': 2,
+  'In Progress': 3, 'Completed': 4, 'Verified': 5, 'Rejected': -1
+};
+const REPAIR_NEXT_STATUS = {
+  'Owner Approved':  'Vendor Assigned',
+  'Vendor Assigned': 'In Progress',
+  'In Progress':     'Completed',
+  'Completed':       'Verified'
+};
+
+async function openRepairDetail(repairId) {
+  showPanel('panel-repair-detail');
+  document.getElementById('rd-repair-id').textContent = repairId;
+  document.getElementById('rd-content').innerHTML =
+    '<div style="text-align:center;padding:48px 0;">' +
+    '<div class="loader"><div class="loader-dot"></div>' +
+    '<div class="loader-label"><span class="loader-label-text">Loading</span></div>' +
+    '</div></div>';
+  await new Promise(r => requestAnimationFrame(r));
+
+  const s = getSession();
+  if (!s) return;
+
+  const res = await api('getRepair', { token: s.token, repairId });
+  if (!res.ok) {
+    document.getElementById('rd-content').innerHTML =
+      '<div style="padding:32px 24px;font-family:\'Space Mono\',monospace;' +
+      'font-size:0.6rem;color:var(--danger);text-align:center;">' +
+      escHtml(res.error || 'Failed to load') + '</div>';
+    return;
+  }
+
+  _currentRepair = res.repair;
+  renderRepairDetail(_currentRepair, s.user.role);
+}
+
+function closeRepairDetail() {
+  showPanel('panel-asset-detail');
+}
+
+function renderRepairDetail(r, role) {
+  document.getElementById('rd-repair-id').textContent = r.id;
+
+  const curIdx     = REPAIR_STATUS_IDX[r.status] !== undefined ? REPAIR_STATUS_IDX[r.status] : 0;
+  const isRejected = r.status === 'Rejected';
+
+  // Info block
+  const estCost = r.estimated_cost && Number(r.estimated_cost) > 0
+    ? '₹' + Number(r.estimated_cost).toLocaleString('en-IN') : '—';
+  const actCost = r.cost && Number(r.cost) > 0
+    ? '₹' + Number(r.cost).toLocaleString('en-IN') : null;
+
+  let html =
+    '<div class="glass" style="padding:20px 24px;margin-bottom:10px;">' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:0.55rem;' +
+           'letter-spacing:2px;color:var(--gold);margin-bottom:8px;">' + escHtml(r.asset_code) + '</div>' +
+      '<div style="font-size:0.95rem;color:var(--text);line-height:1.5;margin-bottom:10px;">' +
+           escHtml(r.issue) + '</div>';
+
+  const statusStyle = REPAIR_STATUS_STYLE[r.status] || { bg: 'var(--surface2)', color: 'var(--text3)' };
+  html += '<span class="rep-status-badge" style="background:' + statusStyle.bg +
+    ';color:' + statusStyle.color + ';font-size:0.5rem;padding:4px 10px;">' + r.status + '</span>';
+
+  html +=
+      '<div style="margin-top:12px;display:flex;gap:20px;">' +
+        '<div><div class="label" style="margin-bottom:2px;">Estimated</div>' +
+             '<div style="font-family:\'Space Mono\',monospace;font-size:0.65rem;">' + estCost + '</div></div>' +
+        (actCost
+          ? '<div><div class="label" style="margin-bottom:2px;">Actual cost</div>' +
+            '<div style="font-family:\'Space Mono\',monospace;font-size:0.65rem;color:var(--gold);">' + actCost + '</div></div>'
+          : '') +
+      '</div>' +
+    '</div>';
+
+  // Timeline
+  html += '<div class="glass" style="margin-bottom:10px;"><div class="repair-timeline">';
+
+  REPAIR_STEPS.forEach((step, idx) => {
+    const isDone    = curIdx > idx;
+    const isCurrent = !isRejected && curIdx === idx;
+    const dotClass  = isDone ? 'done' : (isCurrent ? 'current' : '');
+    const lblClass  = isDone ? 'done' : (isCurrent ? 'current' : '');
+    const lineClass = isDone ? 'done' : '';
+    const isLast    = idx === REPAIR_STEPS.length - 1;
+
+    const dateVal = r[step.dateField] ? r[step.dateField].slice(0, 10) : null;
+    const byVal   = step.byField && r[step.byField] ? r[step.byField] : null;
+
+    html += '<div class="timeline-step">' +
+      '<div class="tl-dot-col">' +
+        '<div class="tl-dot ' + dotClass + '"></div>' +
+        (!isLast ? '<div class="tl-line ' + lineClass + '"></div>' : '') +
+      '</div>' +
+      '<div class="tl-content">' +
+        '<div class="tl-label ' + lblClass + '">' + step.label + '</div>' +
+        ((dateVal || byVal)
+          ? '<div class="tl-meta">' + [dateVal, byVal].filter(Boolean).join(' · ') + '</div>'
+          : '') +
+      '</div>' +
+    '</div>';
+  });
+
+  // Rejected state — shown after Reported step slot
+  if (isRejected) {
+    html += '<div class="timeline-step">' +
+      '<div class="tl-dot-col"><div class="tl-dot rejected"></div></div>' +
+      '<div class="tl-content">' +
+        '<div class="tl-label rejected">Rejected</div>' +
+        (r.owner_approved_date
+          ? '<div class="tl-meta">' + r.owner_approved_date.slice(0, 10) +
+            (r.owner_approved_by ? ' · ' + r.owner_approved_by : '') + '</div>'
+          : '') +
+        (r.notes ? '<div class="tl-meta" style="margin-top:4px;font-style:italic;">' + escHtml(r.notes) + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  html += '</div></div>'; // close timeline + glass
+
+  // Action area — Owner only, for actionable statuses
+  const nextStatus = REPAIR_NEXT_STATUS[r.status];
+  if (role === 'Owner' && nextStatus && !isRejected) {
+    const needsCost = r.status === 'In Progress'; // entering cost when marking Completed
+    html +=
+      '<div class="glass rd-action-area" style="margin-bottom:10px;padding-top:18px;">' +
+        '<div class="label" style="margin-bottom:10px;">Advance status</div>' +
+        (needsCost
+          ? '<div class="field" style="margin-bottom:12px;">' +
+              '<label class="label">Actual Repair Cost ₹</label>' +
+              '<input type="number" class="input" id="rd-cost" placeholder="Final cost">' +
+            '</div>'
+          : '') +
+        '<div class="field" style="margin-bottom:12px;">' +
+          '<label class="label">Notes (optional)</label>' +
+          '<textarea class="input" id="rd-notes" placeholder="Any notes…" style="min-height:58px;resize:none;"></textarea>' +
+        '</div>' +
+        '<button class="btn" id="rd-advance-btn" onclick="submitRepairStatusUpdate()">' +
+          'Mark as: ' + nextStatus +
+        '</button>' +
+        '<div class="feedback muted" id="rd-feedback" style="margin-top:10px;"></div>' +
+      '</div>';
+  }
+
+  document.getElementById('rd-content').innerHTML = html;
+}
+
+async function submitRepairStatusUpdate() {
+  const s = getSession();
+  if (!s || !_currentRepair) return;
+
+  const nextStatus = REPAIR_NEXT_STATUS[_currentRepair.status];
+  if (!nextStatus) return;
+
+  const costEl  = document.getElementById('rd-cost');
+  const notesEl = document.getElementById('rd-notes');
+  const cost    = costEl  ? (Number(costEl.value)  || 0) : undefined;
+  const notes   = notesEl ? notesEl.value.trim()         : '';
+
+  const btn = document.getElementById('rd-advance-btn');
+  const fb  = document.getElementById('rd-feedback');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const res = await api('updateRepairStatus', {
+    token:    s.token,
+    repairId: _currentRepair.id,
+    status:   nextStatus,
+    cost:     cost,
+    notes:    notes
+  });
+
+  btn.disabled = false; btn.textContent = 'Mark as: ' + nextStatus;
+
+  if (!res.ok) {
+    fb.textContent = res.error || 'Failed'; fb.className = 'feedback err';
+    return;
+  }
+
+  // Re-fetch + re-render with updated state
+  await openRepairDetail(_currentRepair.id);
 }
 
 // =====================================================================
