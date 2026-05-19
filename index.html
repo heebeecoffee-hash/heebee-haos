@@ -47,6 +47,7 @@ body.light {
   --noise-op:  0.035;
   --danger:    #c62828;
   --success:   #2e7d32;
+  --warning:   #d97706;
 }
 body.dark {
   --bg:        #0a0a0f;
@@ -70,6 +71,7 @@ body.dark {
   --noise-op:  0.04;
   --danger:    #ff6b6b;
   --success:   #51cf66;
+  --warning:   #fbbf24;
 }
 
 /* =====================================================================
@@ -827,6 +829,30 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
 }
 
 /* =====================================================================
+   APPROVAL QUEUE
+   ===================================================================== */
+.approval-badge {
+  background: var(--danger);
+  color: #fff;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.45rem;
+  padding: 2px 7px;
+  border-radius: 99px;
+  min-width: 18px;
+  text-align: center;
+  display: none;
+}
+.approval-card {
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.approval-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 18px 14px;
+}
+
+/* =====================================================================
    FOOTER
    ===================================================================== */
 .foot {
@@ -917,20 +943,23 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
           <div class="nav-icon">◈</div>
           <div class="nav-text">
             <div class="nav-title">Asset Registry</div>
-            <div class="nav-sub">Add · view · transfer</div>
+            <div class="nav-sub">Add · view · service · repairs</div>
           </div>
         </div>
         <span class="phase-tag live">Live</span>
       </div>
-      <div class="glass nav-item locked">
+      <div class="glass nav-item" onclick="openApprovals()">
         <div class="nav-left">
           <div class="nav-icon">◇</div>
           <div class="nav-text">
-            <div class="nav-title">Service &amp; Repairs</div>
-            <div class="nav-sub">Workflow · approvals</div>
+            <div class="nav-title">Approvals</div>
+            <div class="nav-sub">Repair requests · owner queue</div>
           </div>
         </div>
-        <span class="phase-tag">Phase 3</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="approval-badge" id="approval-badge">0</span>
+          <span class="phase-tag live">Live</span>
+        </div>
       </div>
       <div class="glass nav-item locked">
         <div class="nav-left">
@@ -1211,6 +1240,15 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.5; }
     </div>
     <button class="btn" id="ri-submit" onclick="submitReportIssue()" style="margin-top:16px;">Send for Approval</button>
     <div class="feedback muted" id="ri-feedback" style="margin-bottom:40px;"></div>
+  </section>
+
+  <!-- ============== APPROVALS ============== -->
+  <section class="panel" id="panel-approvals">
+    <div class="panel-hdr">
+      <button class="back-btn" onclick="goToDashboard()">‹</button>
+      <h2 class="panel-title" style="flex:1;">Approvals</h2>
+    </div>
+    <div id="approvals-list"></div>
   </section>
 
   <!-- ============== ASSET DETAIL ============== -->
@@ -1546,29 +1584,29 @@ async function hydrateOwner() {
   const s = getSession();
   if (!s) return;
 
-  const meta = await api('getAppMeta', { token: s.token });
-  if (meta.ok) {
-    document.getElementById('ownerVersion').textContent = meta.version;
-  }
+  const r = await api('getDashboardData', { token: s.token });
+  if (!r.ok) return;
 
-  const out = await api('getOutlets', { token: s.token });
-  if (out.ok) {
-    document.getElementById('ownerOutletCount').textContent = out.outlets.length;
-  }
+  // Cache dropdown data — avoids re-fetching when opening asset registry
+  if (r.outlets)    _outlets    = r.outlets;
+  if (r.categories) _categories = r.categories;
 
-  const cats = await api('getCategories', { token: s.token });
-  if (cats.ok) {
-    document.getElementById('ownerCatCount').textContent = cats.categories.length;
-  }
+  document.getElementById('ownerVersion').textContent     = r.meta.version;
+  document.getElementById('ownerOutletCount').textContent = r.outlets.length;
+  document.getElementById('ownerCatCount').textContent    = r.categories.length;
+  updateApprovalBadge(r.pendingCount || 0);
 }
 
 async function hydrateManager() {
   const s = getSession();
   if (!s) return;
-  const meta = await api('getAppMeta', { token: s.token });
-  if (meta.ok) {
-    document.getElementById('mgrFoot').textContent = 'Session active · ' + meta.version;
-  }
+  const r = await api('getDashboardData', { token: s.token });
+  if (!r.ok) return;
+
+  if (r.outlets)    _outlets    = r.outlets;
+  if (r.categories) _categories = r.categories;
+
+  document.getElementById('mgrFoot').textContent = 'Session active · ' + r.meta.version;
 }
 
 // =====================================================================
@@ -1610,6 +1648,145 @@ function startIdleWatcher() {
     if (!s) { clearInterval(idleId); idleId = null; return; }
     if (!isSessionFresh(s)) { logout(); }
   }, 60000);
+}
+
+// =====================================================================
+// APPROVALS
+// =====================================================================
+let _pendingApprovals = [];
+
+function updateApprovalBadge(count) {
+  const badge = document.getElementById('approval-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+async function openApprovals() {
+  showPanel('panel-approvals');
+  const container = document.getElementById('approvals-list');
+  container.innerHTML =
+    '<div style="text-align:center;padding:48px 0;">' +
+    '<div class="loader"><div class="loader-dot"></div>' +
+    '<div class="loader-label"><span class="loader-label-text">Loading</span></div></div></div>';
+  await new Promise(r => requestAnimationFrame(r));
+
+  const s = getSession();
+  if (!s) return;
+
+  const res = await api('listApprovals', { token: s.token });
+  if (!res.ok) {
+    container.innerHTML =
+      '<div style="padding:24px;text-align:center;font-family:\'Space Mono\',monospace;' +
+      'font-size:0.6rem;letter-spacing:2px;color:var(--danger);">' +
+      (res.error || 'Failed to load') + '</div>';
+    return;
+  }
+
+  _pendingApprovals = res.pending || [];
+  renderApprovalsList();
+}
+
+function renderApprovalsList() {
+  const container = document.getElementById('approvals-list');
+  updateApprovalBadge(_pendingApprovals.length);
+
+  if (_pendingApprovals.length === 0) {
+    container.innerHTML =
+      '<div class="glass empty-state">' +
+      '<div class="empty-icon">✦</div>' +
+      '<div class="empty-text">No pending approvals</div>' +
+      '</div>';
+    return;
+  }
+
+  container.innerHTML = _pendingApprovals.map((r, idx) => approvalCardHTML(r, idx)).join('');
+}
+
+function approvalCardHTML(r, idx) {
+  const estCost = r.estimated_cost && Number(r.estimated_cost) > 0
+    ? '₹' + Number(r.estimated_cost).toLocaleString('en-IN') : 'Est. not provided';
+  return (
+    '<div class="glass approval-card" id="apr-card-' + idx + '">' +
+    '<div style="padding:14px 18px 0;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+        '<span style="font-family:\'Space Mono\',monospace;font-size:0.5rem;color:var(--gold);letter-spacing:1.5px;">' + r.asset_code + '</span>' +
+        '<span style="font-family:\'Space Mono\',monospace;font-size:0.45rem;color:var(--text3);letter-spacing:1px;">' + r.id + '</span>' +
+      '</div>' +
+      '<div style="font-size:0.92rem;color:var(--text);margin-bottom:8px;line-height:1.45;">' + escHtml(r.issue) + '</div>' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:0.48rem;letter-spacing:1px;color:var(--text3);margin-bottom:2px;">' +
+        estCost +
+      '</div>' +
+      '<div style="font-family:\'Space Mono\',monospace;font-size:0.45rem;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">' +
+        r.reported_by + ' · ' + r.reported_date +
+      '</div>' +
+    '</div>' +
+    '<div class="approval-actions" id="apr-actions-' + idx + '">' +
+      '<button class="btn-sm primary" style="background:var(--success);border-color:var(--success);color:#fff;flex:1;" ' +
+        'onclick="showApprovalAction(' + idx + ',\'approve\')">Approve ✓</button>' +
+      '<button class="btn-sm" style="border-color:var(--danger);color:var(--danger);flex:1;" ' +
+        'onclick="showApprovalAction(' + idx + ',\'reject\')">Reject ✗</button>' +
+    '</div>' +
+    '</div>'
+  );
+}
+
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function showApprovalAction(idx, action) {
+  const el = document.getElementById('apr-actions-' + idx);
+  if (!el) return;
+  const isApprove = action === 'approve';
+  const label  = isApprove ? 'Confirm Approve' : 'Confirm Reject';
+  const color  = isApprove ? 'var(--success)'  : 'var(--danger)';
+  el.innerHTML =
+    '<div style="width:100%;padding-bottom:4px;">' +
+      '<textarea class="input" id="apr-notes-' + idx + '" ' +
+        'placeholder="Notes (optional)…" ' +
+        'style="min-height:58px;margin-bottom:8px;font-size:0.82rem;resize:none;"></textarea>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button class="btn-sm primary" style="background:' + color + ';border-color:' + color + ';color:#fff;flex:1;" ' +
+          'onclick="submitApproval(' + idx + ',\'' + action + '\')">' + label + '</button>' +
+        '<button class="btn-sm" style="flex:1;" onclick="renderApprovalsList()">Cancel</button>' +
+      '</div>' +
+    '</div>';
+}
+
+async function submitApproval(idx, action) {
+  const s = getSession();
+  if (!s) return;
+  const repair = _pendingApprovals[idx];
+  if (!repair) return;
+
+  const notesEl = document.getElementById('apr-notes-' + idx);
+  const notes   = notesEl ? notesEl.value.trim() : '';
+  const actEl   = document.getElementById('apr-actions-' + idx);
+  if (actEl) actEl.innerHTML =
+    '<span style="font-family:\'Space Mono\',monospace;font-size:0.55rem;' +
+    'letter-spacing:2px;color:var(--text3);padding:12px 0;">PROCESSING…</span>';
+
+  const apiAction = action === 'approve' ? 'approveRepair' : 'rejectRepair';
+  const res = await api(apiAction, { token: s.token, repairId: repair.id, notes });
+
+  if (!res.ok) {
+    if (actEl) actEl.innerHTML =
+      '<span style="font-family:\'Space Mono\',monospace;font-size:0.55rem;' +
+      'letter-spacing:1px;color:var(--danger);padding:12px 0;">' +
+      escHtml(res.error || 'Failed') + '</span>';
+    return;
+  }
+
+  // Remove approved/rejected item + re-render
+  _pendingApprovals = _pendingApprovals.filter((_, i) => i !== idx);
+  renderApprovalsList();
 }
 
 // =====================================================================

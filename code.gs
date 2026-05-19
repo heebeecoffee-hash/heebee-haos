@@ -190,7 +190,8 @@ function doPost(e) {
       case 'approveRepair':     result = approveRepair(data.token, data.repairId, data.notes); break;
       case 'rejectRepair':      result = rejectRepair(data.token, data.repairId, data.notes); break;
       case 'updateRepairStatus': result = updateRepairStatus(data.token, data.repairId, data.status, data.cost, data.notes); break;
-      case 'listApprovals':     result = listApprovals(data.token); break;
+      case 'listApprovals':      result = listApprovals(data.token); break;
+      case 'getDashboardData':  result = getDashboardData(data.token); break;
       default:               result = { ok: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {
@@ -977,6 +978,54 @@ function migrateEstimatedCost() {
     .setFontWeight('bold').setBackground('#f5f5f7').setFontFamily('Inter');
 
   SpreadsheetApp.getUi().alert('Done — estimated_cost column added to Repair_Journal.');
+}
+
+// Single batch call for dashboard hydration — replaces 3 sequential API calls.
+// Returns meta + outlets + categories + pendingCount in one Apps Script execution.
+function getDashboardData(token) {
+  const auth = getCurrentUser(token);
+  if (!auth.ok) return auth;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Outlets (active only)
+  const outData = ss.getSheetByName('Outlets').getDataRange().getValues();
+  const outH    = outData[0];
+  const outlets = [];
+  for (let i = 1; i < outData.length; i++) {
+    const o = {};
+    outH.forEach((k, j) => o[k] = outData[i][j]);
+    if (o.active === true) outlets.push(o);
+  }
+
+  // Categories (active only)
+  const catData    = ss.getSheetByName('Categories').getDataRange().getValues();
+  const catH       = catData[0];
+  const categories = [];
+  for (let i = 1; i < catData.length; i++) {
+    const c = {};
+    catH.forEach((k, j) => c[k] = catData[i][j]);
+    if (c.active === true) categories.push(c);
+  }
+
+  // Pending approval count (Owner only)
+  let pendingCount = 0;
+  if (normalizeRole(auth.user.role) === 'Owner') {
+    const repData = ss.getSheetByName('Repair_Journal').getDataRange().getValues();
+    const stIdx   = repData[0].indexOf('status');
+    for (let i = 1; i < repData.length; i++) {
+      if (String(repData[i][stIdx]).trim() === 'Reported') pendingCount++;
+    }
+  }
+
+  return {
+    ok:         true,
+    user:       auth.user,
+    meta:       { version: APP_VERSION, sessionHours: SESSION_HOURS },
+    outlets:    outlets,
+    categories: categories,
+    pendingCount: pendingCount
+  };
 }
 
 // Owner approval queue — pending repairs only
